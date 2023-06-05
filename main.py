@@ -14,6 +14,7 @@ import test as predict
 from utils import *
 import text_manipulation
 import naive_attacker
+import pickle
 MAX_LEN = 66
 
 
@@ -66,8 +67,8 @@ if __name__ == "__main__":
                         dest = 'attacker', help = 'Initiate attack mode :), get the sentence *')
     parser.add_argument('--dataset', default = "sst2", type = str,
                         dest = 'dataset', help = 'What database to use')
-    parser.add_argument('--corpus', default = "wikitext-103-raw-v1", type = str,
-                        dest = 'corpus', help = 'What corpus to use for tokenizer')
+    parser.add_argument('--frequency_path', default = "", type = str,
+                        dest = 'frequency_path', help = 'Path to input ids frequency')
     parser.add_argument('--model', default = "bert-base-uncased", type = str,
                         dest = 'model', help = 'What base model to use')
 
@@ -104,14 +105,11 @@ if __name__ == "__main__":
             vocab = text_manipulation.create_vocabulary(tokenizer = tokenizer)  # bert vocab
 
         # If a person decided to give us a corpus and remap by frequency, we will ge the frequencies by that corpus
-        if args.remap_type == "freq-high" or args.remap_type == "freq-low":
-            if "wiki" in args.corpus:
-                corpus = load_dataset("wikitext", args.corpus)
-            else:
-                corpus = load_dataset(args.corpus)
-            input_ids_for_freq = get_input_ids_from_text(tokenizer, corpus["train"]["text"])
+        if args.frequency_path != 0:
+            a_file = open(args.frequency_path, "rb")
+            input_ids_for_freq = pickle.load(a_file)
         else:
-            input_ids_for_freq = []
+            input_ids_for_freq =
 
         # here we create the mapper for the input ids, and its reversed for the adverserial..
         input_ids_mapper, reverse_input_ids_mapper = text_manipulation.mapper(args.remap_type, vocab, input_ids_for_freq)  # remap the vocabulary in some form of ratio

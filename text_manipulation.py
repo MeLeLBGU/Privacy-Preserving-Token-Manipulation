@@ -31,9 +31,6 @@ def create_vocabulary(data={}, tokenizer=BertTokenizer, vocab_type="token"):
         return word_freqs
 
 
-def shuffle_vocab(vocab: list):
-    random.shuffle(vocab)
-    return vocab
 
 
 def mapper(remap_type, vocab:list, input_ids):

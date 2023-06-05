@@ -33,6 +33,7 @@ def get_input_ids_from_text(tokenizer, data):
     return input_ids
 
 
+
 def encode_text(tokenizer, data, max_len, with_seperation=True):
     # Create empty lists to store outputs
     input_ids = []
@@ -101,3 +102,17 @@ def create_data(dataset, type):
     df["text"] = sentence_train
     df["label"] = labels_train
     return df
+
+
+def get_input_ids_frequency(tokenizer, input_ids):
+    vocab = text_manipulation.create_vocabulary(tokenizer=tokenizer)
+
+    freq_ids_map = {int(key): 0 for key in vocab}
+    for i, ids in enumerate(tqdm(input_ids)):
+        for val in ids:
+            val = int(val)
+            if val == 0:
+                continue
+            freq_ids_map[val] = freq_ids_map[val] + 1
+    log.info("Done generating input ids from text!")
+    return freq_ids_map
