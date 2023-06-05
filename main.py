@@ -13,10 +13,10 @@ import train_new as train2
 import test as predict
 from utils import *
 import text_manipulation
-
+import naive_attacker
 MAX_LEN = 66
 
-device = torch.device("cuda")
+
 
 
 def initialize_model(epochs, dataloader):
@@ -54,10 +54,18 @@ if __name__ == "__main__":
                         dest = 'shuffle', help = 'shuffle the voac phase.')
     parser.add_argument('--vocab_type', default = "token", type = str,
                         dest = 'vocab_type', help = 'The vocab type, by token? by word?')
-    parser.add_argument('--remap', default = 2, type = int,
-                        dest = 'remap', help = 'How many tokens are we going to remap')
+    parser.add_argument('--remap_count', default = 2, type = int,
+                        dest = 'remap_count', help = 'How many tokens are we going to remap')
     parser.add_argument('--save', default = "result.pt", type = str,
                         dest = 'save', help = 'Predict phase.')
+    parser.add_argument('--remap', default = "validation", type = str,
+                        dest = 'remap', help = 'Predict phase.')
+    parser.add_argument('--remap_type', default = "random", type = str,
+                        dest = 'remap_type', help = 'what type of remap.')
+    parser.add_argument('--cpu', default = False, action = "store_true",
+                        dest = 'cpu', help = 'Use cpu instead of a device')
+    parser.add_argument('--attacker', default = False, action = "store_true",
+                        dest = 'attacker', help = 'Initiate attack mode :), get the sentence *')
 
     args = parser.parse_args()
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -66,6 +74,11 @@ if __name__ == "__main__":
 
     # prep input
     batch_size = 32
+    if not args.cpu:
+        device = torch.device("cuda:1")
+    else:
+        device = torch.device("cpu")
+
 
     # training mode
     if not args.predict:
@@ -74,20 +87,33 @@ if __name__ == "__main__":
         validation = create_data(data, "validation")
         train_text = train["text"]
         val_text = validation["text"]
-
-        if args.vocab_type == "token":
-            vocab = text_manipulation.create_vocabulary(tokenizer = tokenizer)  # bert vocab
-        if args.shuffle:
-            vocab = text_manipulation.shuffle_vocab(vocab)  # shuffle the vocabulary
-        vocab = text_manipulation.remap_vocab(vocab, args.remap)  # remap the vocabulary in some form of ratio
-
-        train_input_ids, train_attention_mask = preprocess_text_for_bert(tokenizer, train_text, MAX_LEN)
-        text_manipulation.remap_input_ids(train_input_ids, vocab)
-        exit(1)
-        val_input_ids, val_attention_mask = preprocess_text_for_bert(tokenizer, val_text, MAX_LEN)
-
         train_labels = torch.tensor(train["label"])
         val_labels = torch.tensor(validation["label"])
+
+        # preprocess the text to create the input ids
+        train_input_ids, train_attention_mask = preprocess_text_for_bert(tokenizer, train_text, MAX_LEN)
+        val_input_ids, val_attention_mask = preprocess_text_for_bert(tokenizer, val_text, MAX_LEN)
+
+        if args.vocab_type == "token":
+            # create vocabulary from the tokenizer -- note that this is a list that each index is mapped
+            # to an input id, which we will later remap. Given input id which is equal to the index
+            # We remap it to the value in the vocab[input_id]
+            vocab = text_manipulation.create_vocabulary(tokenizer = tokenizer)  # bert vocab
+        if args.remap_type == "random":
+            vocab, reverse_vocab = text_manipulation.remap_vocab(vocab, args.remap_count, args.shuffle)  # remap the vocabulary in some form of ratio
+        else:
+            vocab, reverse_vocab = text_manipulation.remap_vocab_by_frequency(vocab, train_input_ids, args.remap_type)  # remap the vocabulary in some form of ratio
+
+
+        # Now remap the tokens to the new tokens
+        if args.remap == "validation" or args.remap == "all":
+            val_input_ids = text_manipulation.remap_input_ids(val_input_ids, vocab)
+        if args.remap == "all":
+            train_input_ids = text_manipulation.remap_input_ids(train_input_ids, vocab)
+
+        if args.attacker:
+            naive_attacker.main(tokenizer, device, train_input_ids, val_input_ids, reverse_vocab, args.remap_count)
+            exit(0)
         # Create the DataLoader for our training set
         train_data, train_sampler, train_dataloader = create_dataloader(train_input_ids, train_attention_mask,
                                                                         train_labels, batch_size)

@@ -7,10 +7,13 @@ import os
 def train(model, epochs, train_dataloader, device, cross_entropy, optimizer, val_dataloader, save):
     train_losses = []
     valid_losses = []
+    best_train = 0
+    best_acc = 0
     # set initial loss to infinite
     best_valid_loss = float('inf')
     result_name = save.split(".pt")[0] + ".txt"
     f = open(result_name, "w")
+    f.writelines("Train | Valid | Accuracy\n")
     f.close()
     # for each epoch
     for epoch in range(epochs):
@@ -26,8 +29,10 @@ def train(model, epochs, train_dataloader, device, cross_entropy, optimizer, val
         # save the best model
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
+            best_acc = acc_score
+            best_train = train_loss
             # model.module.save_pretrained("./PragFormer", push_to_hub = False)
-            torch.save(model.state_dict(), save)
+            # torch.save(model.state_dict(), save)
 
         # append training and validation loss
         train_losses.append(train_loss)
@@ -37,9 +42,8 @@ def train(model, epochs, train_dataloader, device, cross_entropy, optimizer, val
         print(f'Validation Loss: {valid_loss:.3f}')
         print(f'Accuracy: {acc_score:.3f}')
         with open(result_name, "a") as f:
-            f.writelines(f'{train_loss:.3f} {valid_loss:.3f} {acc_score:.3f}')
+            f.writelines(f'{train_loss:.3f} | {valid_loss:.3f} | {acc_score:.3f}')
             f.writelines("\n")
-        # f = open("results.txt", "a")
 
 
 

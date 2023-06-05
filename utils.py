@@ -8,6 +8,19 @@ import numpy as np
 from transformers import AdamW, get_linear_schedule_with_warmup
 from BertClassifier import BertClassifier
 
+UNIQUE_TOKENS = [100, 101, 102, 0]
+
+
+def get_text_from_input_ids(tokenizer, input_ids):
+    texts = []
+    if not isinstance(input_ids[0], list):
+        return tokenizer.decode(input_ids, clean_up_tokenization_spaces = True, skip_special_tokens = True)
+    for ids in input_ids:
+        text = tokenizer.decode(ids)#, clean_up_tokenization_spaces = True, skip_special_tokens = True)
+        texts.append(text)
+    return texts
+
+
 def preprocess_text_for_bert(tokenizer, data, max_len):
     # Create empty lists to store outputs
     input_ids = []
