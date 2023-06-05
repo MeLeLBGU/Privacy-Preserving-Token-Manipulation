@@ -12,14 +12,13 @@ from BertClassifier import BertClassifier
 import train_new as train2
 import test as predict
 from utils import *
-import text_manipulation
 import naive_attacker
 import pickle
 
 
 def read_and_generate_frequencies(tokenizer, data):
     freq_ids = []
-    vocab = text_manipulation.create_vocabulary(tokenizer=tokenizer)
+    vocab = create_vocabulary(tokenizer=tokenizer)
 
     freq_ids_map = {int(key): 0 for key in vocab}
     for sent in tqdm(data):
