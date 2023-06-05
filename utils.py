@@ -2,14 +2,13 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 # from sklearn.utils.class_weight import compute_class_weight
 # import parser
-
+from tqdm import *
 import numpy as np
-
+import logging as log
 from transformers import AdamW, get_linear_schedule_with_warmup
 from BertClassifier import BertClassifier
 
 UNIQUE_TOKENS = [100, 101, 102, 0]
-
 
 
 def get_text_from_input_ids(tokenizer, input_ids):
@@ -24,12 +23,15 @@ def get_text_from_input_ids(tokenizer, input_ids):
         texts.append(text)
     return texts
 
+
 def get_input_ids_from_text(tokenizer, data):
     input_ids = []
-    for sent in data:
+    for sent in tqdm(data):
         text = tokenizer.encode(sent)
         input_ids.append(text)
+    log.info("Done generating input ids from text!")
     return input_ids
+
 
 def encode_text(tokenizer, data, max_len, with_seperation=True):
     # Create empty lists to store outputs

@@ -105,8 +105,11 @@ if __name__ == "__main__":
 
         # If a person decided to give us a corpus and remap by frequency, we will ge the frequencies by that corpus
         if args.remap_type == "freq-high" or args.remap_type == "freq-low":
-            corpus = load_dataset(args.corpus)
-            input_ids_for_freq = get_input_ids_from_text(tokenizer, corpus["text"])
+            if "wiki" in args.corpus:
+                corpus = load_dataset("wikitext", args.corpus)
+            else:
+                corpus = load_dataset(args.corpus)
+            input_ids_for_freq = get_input_ids_from_text(tokenizer, corpus["train"]["text"])
         else:
             input_ids_for_freq = []
 
