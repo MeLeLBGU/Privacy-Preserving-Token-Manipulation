@@ -53,6 +53,6 @@ if __name__ == "__main__":
     else:
         text = load_dataset(args.corpus)
     data = read_and_generate_frequencies(tokenizer, text)
-    a_file = open(save, "wb")
-    pickle.dump(dictionary_data, a_file)
+    a_file = open(args.save, "wb")
+    pickle.dump(data, a_file)
     a_file.close()
