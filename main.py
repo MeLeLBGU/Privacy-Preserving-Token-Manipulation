@@ -12,9 +12,9 @@ from BertClassifier import BertClassifier
 import train_new as train2
 import test as predict
 from utils import *
-import text_manipulation
 import naive_attacker
 import pickle
+from remap_base import *
 MAX_LEN = 66
 
 
@@ -85,6 +85,15 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
+    # Get the vocabulary of the model, it is simply an
+    if args.vocab_type == "token":
+        vocab = create_vocabulary(tokenizer=tokenizer)  # bert vocab
+
+    if args.remap_type == "random":
+        remapper = RemapRandom(vocab)
+    elif "freq" in args.remap_type:
+        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type)
+
     # training mode
     if not args.predict:
         print("Training Model")
@@ -100,28 +109,14 @@ if __name__ == "__main__":
         train_input_ids, train_attention_mask = encode_text(tokenizer, train_text, MAX_LEN)
         val_input_ids, val_attention_mask = encode_text(tokenizer, val_text, MAX_LEN)
 
-        # Get the vocabulary of the model, it is simply an
-        if args.vocab_type == "token":
-            vocab = text_manipulation.create_vocabulary(tokenizer = tokenizer)  # bert vocab
-
-        # If a person decided to give us a corpus and remap by frequency, we will ge the frequencies by that corpus
-        if args.frequency_path != 0:
-            a_file = open(args.frequency_path, "rb")
-            input_ids_for_freq = pickle.load(a_file)
-        else:
-            input_ids_for_freq =
-
-        # here we create the mapper for the input ids, and its reversed for the adverserial..
-        input_ids_mapper, reverse_input_ids_mapper = text_manipulation.mapper(args.remap_type, vocab, input_ids_for_freq)  # remap the vocabulary in some form of ratio
-
         # Now remap the tokens to the new tokens
         if args.remap == "validation" or args.remap == "all":
-            val_input_ids = text_manipulation.remap_input_ids(val_input_ids, vocab)
+            val_input_ids = remapper.remap_input_ids(val_input_ids)
         if args.remap == "all":
-            train_input_ids = text_manipulation.remap_input_ids(train_input_ids, vocab)
+            train_input_ids = remapper.remap_input_ids(train_input_ids)
 
         if args.attacker:
-            naive_attacker.main(tokenizer, device, train_input_ids, val_input_ids, reverse_input_ids_mapper, args.remap_count)
+            naive_attacker.main(tokenizer, device, train_input_ids, val_input_ids, remapper, args.remap_count)
             exit(0)
         # Create the DataLoader for our training set
         train_data, train_sampler, train_dataloader = create_dataloader(train_input_ids, train_attention_mask,

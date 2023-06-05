@@ -116,3 +116,26 @@ def get_input_ids_frequency(tokenizer, input_ids):
             freq_ids_map[val] = freq_ids_map[val] + 1
     log.info("Done generating input ids from text!")
     return freq_ids_map
+
+
+def create_vocabulary(data={}, tokenizer=BertTokenizer, vocab_type="token"):
+    if vocab_type == "token":
+        d = tokenizer.get_vocab()
+        arr = [0] * len(d)
+        for i, key in enumerate(d):
+            arr[i] = d[key]
+        return arr
+
+    if vocab_type == "word":
+        exit(1)
+        word_freqs = defaultdict(int)
+        pre_tokenizer = tokenizers.pre_tokenizers.BertPreTokenizer()
+        for i, sent in enumerate(data):
+            words_with_offsets = pre_tokenizer.pre_tokenize_str(sent)
+            new_words = [word for word, offset in words_with_offsets]
+            for word in new_words:
+                if word in string.punctuation:
+                    continue
+                word_freqs[str(word)] += 1
+        return word_freqs
+
