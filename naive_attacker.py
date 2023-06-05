@@ -15,6 +15,7 @@ def create_possible_permutation(reverse_vocab, input_ids, permu_count=2):
     token_choices1 = get_token_choices(reverse_vocab, input_ids[0], permu_count)
     token_choices2 = get_token_choices(reverse_vocab, input_ids[1], permu_count)
     permutations = list(map(lambda x: list(x), product(token_choices1, token_choices2)))
+    # use pqdm ot tqdm
     for i, token in enumerate(input_ids):
         if token == 0:
             break

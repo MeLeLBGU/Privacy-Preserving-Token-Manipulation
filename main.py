@@ -50,14 +50,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--predict', default = False, action = "store_true",
                         dest = 'predict', help = 'Predict phase.')
-    parser.add_argument('--shuffle', default = False, action = "store_true",
-                        dest = 'shuffle', help = 'shuffle the voac phase.')
     parser.add_argument('--vocab_type', default = "token", type = str,
                         dest = 'vocab_type', help = 'The vocab type, by token? by word?')
     parser.add_argument('--remap_count', default = 2, type = int,
                         dest = 'remap_count', help = 'How many tokens are we going to remap')
     parser.add_argument('--save', default = "result.pt", type = str,
-                        dest = 'save', help = 'Predict phase.')
+                        dest = 'save', help = 'Save mode path.')
     parser.add_argument('--remap', default = "validation", type = str,
                         dest = 'remap', help = 'Predict phase.')
     parser.add_argument('--remap_type', default = "random", type = str,
@@ -66,11 +64,18 @@ if __name__ == "__main__":
                         dest = 'cpu', help = 'Use cpu instead of a device')
     parser.add_argument('--attacker', default = False, action = "store_true",
                         dest = 'attacker', help = 'Initiate attack mode :), get the sentence *')
+    parser.add_argument('--dataset', default = "sst2", type = str,
+                        dest = 'dataset', help = 'What database to use')
+    parser.add_argument('--corpus', default = "wikitext-103-raw-v1", type = str,
+                        dest = 'corpus', help = 'What corpus to use for tokenizer')
+    parser.add_argument('--model', default = "bert-base-uncased", type = str,
+                        dest = 'model', help = 'What base model to use')
 
     args = parser.parse_args()
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
-    data = load_dataset('sst2')
+
+    tokenizer = BertTokenizer.from_pretrained(args.model)
+    model = BertForSequenceClassification.from_pretrained(args.model)
+    data = load_dataset(args.dataset)
 
     # prep input
     batch_size = 32
@@ -79,10 +84,10 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
-
     # training mode
     if not args.predict:
         print("Training Model")
+        # this is just to create the data from downstream task
         train = create_data(data, "train")  # READ DATA SST2
         validation = create_data(data, "validation")
         train_text = train["text"]
@@ -91,19 +96,22 @@ if __name__ == "__main__":
         val_labels = torch.tensor(validation["label"])
 
         # preprocess the text to create the input ids
-        train_input_ids, train_attention_mask = preprocess_text_for_bert(tokenizer, train_text, MAX_LEN)
-        val_input_ids, val_attention_mask = preprocess_text_for_bert(tokenizer, val_text, MAX_LEN)
+        train_input_ids, train_attention_mask = encode_text(tokenizer, train_text, MAX_LEN)
+        val_input_ids, val_attention_mask = encode_text(tokenizer, val_text, MAX_LEN)
 
+        # Get the vocabulary of the model, it is simply an
         if args.vocab_type == "token":
-            # create vocabulary from the tokenizer -- note that this is a list that each index is mapped
-            # to an input id, which we will later remap. Given input id which is equal to the index
-            # We remap it to the value in the vocab[input_id]
             vocab = text_manipulation.create_vocabulary(tokenizer = tokenizer)  # bert vocab
-        if args.remap_type == "random":
-            vocab, reverse_vocab = text_manipulation.remap_vocab(vocab, args.remap_count, args.shuffle)  # remap the vocabulary in some form of ratio
-        else:
-            vocab, reverse_vocab = text_manipulation.remap_vocab_by_frequency(vocab, train_input_ids, args.remap_type)  # remap the vocabulary in some form of ratio
 
+        # If a person decided to give us a corpus and remap by frequency, we will ge the frequencies by that corpus
+        if args.remap_type == "freq-high" or args.remap_type == "freq-low":
+            corpus = load_dataset(args.corpus)
+            input_ids_for_freq = get_input_ids_from_text(tokenizer, corpus["text"])
+        else:
+            input_ids_for_freq = []
+
+        # here we create the mapper for the input ids, and its reversed for the adverserial..
+        input_ids_mapper, reverse_input_ids_mapper = text_manipulation.mapper(args.remap_type, vocab, input_ids_for_freq)  # remap the vocabulary in some form of ratio
 
         # Now remap the tokens to the new tokens
         if args.remap == "validation" or args.remap == "all":
@@ -112,7 +120,7 @@ if __name__ == "__main__":
             train_input_ids = text_manipulation.remap_input_ids(train_input_ids, vocab)
 
         if args.attacker:
-            naive_attacker.main(tokenizer, device, train_input_ids, val_input_ids, reverse_vocab, args.remap_count)
+            naive_attacker.main(tokenizer, device, train_input_ids, val_input_ids, reverse_input_ids_mapper, args.remap_count)
             exit(0)
         # Create the DataLoader for our training set
         train_data, train_sampler, train_dataloader = create_dataloader(train_input_ids, train_attention_mask,

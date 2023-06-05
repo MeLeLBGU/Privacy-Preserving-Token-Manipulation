@@ -11,7 +11,11 @@ from BertClassifier import BertClassifier
 UNIQUE_TOKENS = [100, 101, 102, 0]
 
 
+
 def get_text_from_input_ids(tokenizer, input_ids):
+    """
+    from input ids it returns the input ids
+    """
     texts = []
     if not isinstance(input_ids[0], list):
         return tokenizer.decode(input_ids, clean_up_tokenization_spaces = True, skip_special_tokens = True)
@@ -20,8 +24,14 @@ def get_text_from_input_ids(tokenizer, input_ids):
         texts.append(text)
     return texts
 
+def get_input_ids_from_text(tokenizer, data):
+    input_ids = []
+    for sent in data:
+        text = tokenizer.encode(sent)
+        input_ids.append(text)
+    return input_ids
 
-def preprocess_text_for_bert(tokenizer, data, max_len):
+def encode_text(tokenizer, data, max_len, with_seperation=True):
     # Create empty lists to store outputs
     input_ids = []
     attention_masks = []
@@ -38,7 +48,7 @@ def preprocess_text_for_bert(tokenizer, data, max_len):
         #    (6) Return a dictionary of outputs
         encoded_sent = tokenizer.encode_plus(
             text = sent,  # Preprocess sentence
-            add_special_tokens = True,  # Add `[CLS]` and `[SEP]`
+            add_special_tokens = with_seperation,  # Add `[CLS]` and `[SEP]`
             max_length = max_len,  # Max length to truncate/pad
             pad_to_max_length = True,  # Pad sentence to max length
             # return_tensors='pt',           # Return PyTorch tensor

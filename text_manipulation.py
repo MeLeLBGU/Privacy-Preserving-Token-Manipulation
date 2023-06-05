@@ -6,7 +6,8 @@ from transformers import BertTokenizer
 import random
 import utils
 import collections
-
+import logging as log
+import tqdm
 
 def create_vocabulary(data={}, tokenizer=BertTokenizer, vocab_type="token"):
     if vocab_type == "token":
@@ -35,7 +36,19 @@ def shuffle_vocab(vocab: list):
     return vocab
 
 
-def remap_vocab(vocab: list, remap_count=2, shuffle=False):
+def mapper(remap_type, vocab:list, input_ids):
+    if remap_type == "random":
+        log.info("You chose to remap the inputs ids randomly")
+        return remap_vocab_randomly(vocab)
+    elif remap_type == "freq-high":
+        log.info("You chose to remap the inputs ids by mapping the lower frequency to the higher one")
+        return remap_vocab_by_frequency(vocab, input_ids, freq_type="high")
+    elif remap_type == "freq-low":
+        log.info("You chose to remap the inputs ids by mapping the higher frequency to the lower one")
+        return remap_vocab_by_frequency(vocab, input_ids, freq_type="low")
+
+
+def remap_vocab_randomly(vocab: list, remap_count=2, shuffle=True):
     """
     given a vocab of the form [id]:id.
      The main idea is to remap such that [1]:1 and [2]:1 --- token with id
@@ -81,9 +94,9 @@ def remap_vocab_by_frequency(vocab: list, input_ids, freq_type="high"):
     sorted_freq_ids = sorted(freq_ids_map.items(), key = lambda x: x[1])
     remap = {int(key): 0 for key in vocab}
     reverse_map = {int(key): None for key in vocab}
-    for i, tpl in enumerate(sorted_freq_ids):
-        if i > len(vocab) / 2:
-            break
+
+    for i, tpl in tqdm(enumerate(sorted_freq_ids)):
+
         high_freq_id, _ = sorted_freq_ids[-(i + 1)]
         low_freq_id, _ = sorted_freq_ids[i]
         if high_freq_id in utils.UNIQUE_TOKENS or low_freq_id in utils.UNIQUE_TOKENS:
@@ -104,7 +117,7 @@ def remap_vocab_by_frequency(vocab: list, input_ids, freq_type="high"):
     return remap, reverse_map
 
 # we assume that the vocab is id: 'word'
-def remap_input_ids(input_ids, vocab):
+def remap_input_ids(input_ids, mapper):
     new_input_ids = input_ids
     cpy = input_ids
     for i, ids in enumerate(input_ids):
@@ -116,7 +129,7 @@ def remap_input_ids(input_ids, vocab):
             #if token in utils.UNIQUE_TOKENS:
             #    continue
 
-            new_input_ids[i][j] = vocab[int(token)]
+            new_input_ids[i][j] = mapper[int(token)]
         # print(new_input_ids[i])
         #exit(1)
     return new_input_ids
