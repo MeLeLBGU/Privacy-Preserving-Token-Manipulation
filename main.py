@@ -69,13 +69,9 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', default = "sst2", type = str,
                         dest = 'dataset', help = 'What database to use', choices=["sst2"])
     parser.add_argument('--frequency_path', default = "", type = str,
-<<<<<<< HEAD
                         dest = 'frequency_path', help = 'Path to input ids frequency. (default: "" - no path). You can use the path ')
-=======
-                        dest = 'frequency_path', help = 'Path to input ids frequency')
-    parser.add_argument('--frequency_type', default = "all", type = str,
-                        dest = 'frequency_type', help = 'Path to input ids frequency')
->>>>>>> c0aa5b478f0a418ea41a8924cc1437178526248d
+    parser.add_argument('--frequency_window', default = "all", type = str,
+                        dest = 'frequency_window', help = 'Path to input ids frequency. (default: "all")', choices=["all", "half"])
     parser.add_argument('--model', default = "bert-base-uncased", type = str,
                         dest = 'model', help = 'What base model to use')
 
