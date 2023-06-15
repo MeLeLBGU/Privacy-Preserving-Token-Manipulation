@@ -90,7 +90,7 @@ class RemapFrequency(RemapBase):
         elif "low" in freq_type:
             self.freq_type = "low"
         self.window = window
-
+        print(self.window)
         self.vocab = vocab
         if not os.path.exists(freq_path):
             log.error("No frequency dictionary path")
@@ -104,15 +104,18 @@ class RemapFrequency(RemapBase):
         a_file.close()
 
     def create_remap(self):
-        sorted_freq_ids = sorted(self.freq_ids.items(), key=lambda x: x[1])
+        sorted_freq_ids = sorted(self.freq_ids.items(), key=lambda x: x[1], reverse=True)
         self.remap = {int(key): 0 for key in self.vocab}
         self.reverse_map = {int(key): None for key in self.vocab}
-        for i, tpl in enumerate(tqdm(sorted_freq_ids)):
-            if i == len(self.vocab) / 2:
-                break
-            id_high, id_low = self.get_high_low_freq_index(i)
-            high_freq_id, _ = sorted_freq_ids[id_high]
-            low_freq_id, _ = sorted_freq_ids[id_low]
+        log.info("Freq:", sorted_freq_ids)
+        
+        for i in tqdm(range(int(len(self.vocab)/2))):
+
+            high_freq_id, _ = sorted_freq_ids.pop(0)
+            low_id = self.get_low_freq_index(high_freq_id)
+            while low_id >= len(sorted_freq_ids):
+                low_id = low_id - 1
+            low_freq_id,_ = sorted_freq_ids.pop(low_id)
 
             high_freq_id = int(high_freq_id)
             low_freq_id = int(low_freq_id)
@@ -126,13 +129,16 @@ class RemapFrequency(RemapBase):
                 self.remap[low_freq_id] = low_freq_id
                 self.reverse_map[high_freq_id] = [low_freq_id, high_freq_id]
                 self.reverse_map[low_freq_id] = [low_freq_id, high_freq_id]
-
+        log.info(self.remap)
         log.info("Remap[10] =" + str(self.remap[10]))
         log.info("ReverseRemap[10] =" + str(self.reverse_map[10]))
+        
 
-    def get_high_low_freq_index(self, i):
+    def get_low_freq_index(self, i):
         if self.window == "all":
-            return -(i + 1), i
+            return -(i + 1)
         elif self.window == "half":
-            return int(i + (len(self.vocab)/2)), i
+            return int(i + (len(self.vocab)/2))
+        else:
+            return i + int(self.window) 
 

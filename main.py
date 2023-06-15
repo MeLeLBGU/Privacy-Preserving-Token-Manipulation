@@ -67,11 +67,11 @@ if __name__ == "__main__":
     parser.add_argument('--attacker', default = False, action = "store_true",
                         dest = 'attacker', help = 'Initiate attack mode :), get the sentence *')
     parser.add_argument('--dataset', default = "sst2", type = str,
-                        dest = 'dataset', help = 'What database to use', choices=["sst2"])
-    parser.add_argument('--frequency_path', default = "", type = str,
-                        dest = 'frequency_path', help = 'Path to input ids frequency. (default: "" - no path). You can use the path ')
+                        dest = 'dataset', help = 'What database to use', choices=["sst2", "imdb"])
+    parser.add_argument('--frequency_path', default = "wiki_freq.pkl", type = str,
+                        dest = 'frequency_path', help = 'Path to input ids frequency. (default: "wiki_freq.pkl" - no path).')
     parser.add_argument('--frequency_window', default = "all", type = str,
-                        dest = 'frequency_window', help = 'Path to input ids frequency. (default: "all")', choices=["all", "half"])
+                        dest = 'frequency_window', help = 'Path to input ids frequency. (default: "all")')
     parser.add_argument('--model', default = "bert-base-uncased", type = str,
                         dest = 'model', help = 'What base model to use')
 
@@ -80,11 +80,13 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained(args.model)
     model = BertForSequenceClassification.from_pretrained(args.model)
     data = load_dataset(args.dataset)
-    log.basicConfig(level=log.INFO)
+    fname = args.save.split(".pt")[0] + ".log"
+    print(fname)
+    log.basicConfig(filename=fname, level=log.INFO)
     # prep input
     batch_size = 32
     if not args.cpu:
-        device = torch.device("cuda:1")
+        device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
 
@@ -95,7 +97,7 @@ if __name__ == "__main__":
     if args.remap_type == "random":
         remapper = RemapRandom(vocab)
     elif "freq" in args.remap_type:
-        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, args.frequency_type)
+        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, args.frequency_window)
 
     # training mode
     if not args.predict:
