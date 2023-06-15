@@ -113,8 +113,7 @@ class RemapFrequency(RemapBase):
             id_high, id_low = self.get_high_low_freq_index(i)
             high_freq_id, _ = sorted_freq_ids[id_high]
             low_freq_id, _ = sorted_freq_ids[id_low]
-            # if high_freq_id in utils.UNIQUE_TOKENS or low_freq_id in utils.UNIQUE_TOKENS:
-            #     continue
+
             high_freq_id = int(high_freq_id)
             low_freq_id = int(low_freq_id)
             if self.freq_type == "high":

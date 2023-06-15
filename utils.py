@@ -115,7 +115,7 @@ def get_input_ids_frequency(tokenizer, input_ids):
     return freq_ids_map
 
 
-def create_vocabulary(data={}, tokenizer=BertTokenizer, vocab_type="token"):
+def create_vocabulary(data, tokenizer, vocab_type="token"):
     if vocab_type == "token":
         d = tokenizer.get_vocab()
         arr = [0] * len(d)
