@@ -23,12 +23,11 @@ def read_and_generate_frequencies(tokenizer, data):
     freq_ids_map = {int(key): 0 for key in vocab}
     for sent in tqdm(data):
         input_ids = tokenizer.encode(sent)
-        for i, ids in enumerate(input_ids):
-            for val in ids:
-                val = int(val)
-                if val == 0:
-                    continue
-                freq_ids_map[val] = freq_ids_map[val] + 1
+        for val in input_ids:
+            val = int(val)
+            if val == 0:
+                continue
+            freq_ids_map[val] = freq_ids_map[val] + 1
     log.info("Done generating input ids from text!")
 
     return freq_ids_map

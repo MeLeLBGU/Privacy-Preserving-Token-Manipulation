@@ -13,6 +13,7 @@ import train_new as train2
 import test as predict
 from utils import *
 import naive_attacker
+import logging as log
 import pickle
 from remap_base import *
 MAX_LEN = 66
@@ -69,6 +70,8 @@ if __name__ == "__main__":
                         dest = 'dataset', help = 'What database to use', choices=["sst2"])
     parser.add_argument('--frequency_path', default = "", type = str,
                         dest = 'frequency_path', help = 'Path to input ids frequency')
+    parser.add_argument('--frequency_type', default = "all", type = str,
+                        dest = 'frequency_type', help = 'Path to input ids frequency')
     parser.add_argument('--model', default = "bert-base-uncased", type = str,
                         dest = 'model', help = 'What base model to use')
 
@@ -77,7 +80,7 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained(args.model)
     model = BertForSequenceClassification.from_pretrained(args.model)
     data = load_dataset(args.dataset)
-
+    log.basicConfig(level=log.INFO)
     # prep input
     batch_size = 32
     if not args.cpu:
@@ -92,7 +95,7 @@ if __name__ == "__main__":
     if args.remap_type == "random":
         remapper = RemapRandom(vocab)
     elif "freq" in args.remap_type:
-        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type)
+        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, args.frequency_type)
 
     # training mode
     if not args.predict:
