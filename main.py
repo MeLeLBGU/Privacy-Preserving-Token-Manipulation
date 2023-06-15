@@ -50,23 +50,23 @@ def initialize_model(epochs, dataloader):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--predict', default = False, action = "store_true",
-                        dest = 'predict', help = 'Predict phase.')
+                        dest = 'predict', help = 'Predict phase. (default: False)')
     parser.add_argument('--vocab_type', default = "token", type = str,
-                        dest = 'vocab_type', help = 'The vocab type, by token? by word?')
+                        dest = 'vocab_type', help = 'The vocab type, by token? by word? Dont need to change this, it is set to token (input if)', choices=["token", "word"])
     parser.add_argument('--remap_count', default = 2, type = int,
-                        dest = 'remap_count', help = 'How many tokens are we going to remap')
+                        dest = 'remap_count', help = 'How many tokens are we going to remap (default: 2)')
     parser.add_argument('--save', default = "result.pt", type = str,
-                        dest = 'save', help = 'Save mode path.')
+                        dest = 'save', help = 'Save mode path. (default: result.pt)')
     parser.add_argument('--remap', default = "validation", type = str,
-                        dest = 'remap', help = 'Predict phase.')
+                        dest = 'remap', help = 'Remap the validation/text set or all the sets. (default: validation)', choices=["validation", "all"])
     parser.add_argument('--remap_type', default = "random", type = str,
-                        dest = 'remap_type', help = 'what type of remap.')
+                        dest = 'remap_type', help = 'what type of remap. freq-high is mapping low to high (default: random)', choices=["random", "freq-high","freq-low"])
     parser.add_argument('--cpu', default = False, action = "store_true",
                         dest = 'cpu', help = 'Use cpu instead of a device')
     parser.add_argument('--attacker', default = False, action = "store_true",
                         dest = 'attacker', help = 'Initiate attack mode :), get the sentence *')
     parser.add_argument('--dataset', default = "sst2", type = str,
-                        dest = 'dataset', help = 'What database to use')
+                        dest = 'dataset', help = 'What database to use', choices=["sst2"])
     parser.add_argument('--frequency_path', default = "", type = str,
                         dest = 'frequency_path', help = 'Path to input ids frequency')
     parser.add_argument('--model', default = "bert-base-uncased", type = str,

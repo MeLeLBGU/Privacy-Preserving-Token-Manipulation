@@ -105,8 +105,8 @@ class RemapFrequency(RemapBase):
         for i, tpl in enumerate(tqdm(sorted_freq_ids)):
             high_freq_id, _ = sorted_freq_ids[-(i + 1)]
             low_freq_id, _ = sorted_freq_ids[i]
-            # if high_freq_id in utils.UNIQUE_TOKENS or low_freq_id in utils.UNIQUE_TOKENS:
-            #     continue
+            
+            
             high_freq_id = int(high_freq_id)
             low_freq_id = int(low_freq_id)
             if self.freq_type == "high":
