@@ -68,7 +68,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', default = "sst2", type = str,
                         dest = 'dataset', help = 'What database to use', choices=["sst2"])
     parser.add_argument('--frequency_path', default = "", type = str,
-                        dest = 'frequency_path', help = 'Path to input ids frequency')
+                        dest = 'frequency_path', help = 'Path to input ids frequency. (default: "" - no path). You can use the path ')
     parser.add_argument('--model', default = "bert-base-uncased", type = str,
                         dest = 'model', help = 'What base model to use')
 
