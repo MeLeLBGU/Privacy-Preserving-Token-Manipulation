@@ -1,12 +1,9 @@
 import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-# from sklearn.utils.class_weight import compute_class_weight
-# import parser
 from tqdm import *
+from transformers import BertTokenizer
 import numpy as np
 import logging as log
-from transformers import AdamW, get_linear_schedule_with_warmup
-from BertClassifier import BertClassifier
 
 UNIQUE_TOKENS = [100, 101, 102, 0]
 
