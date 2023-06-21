@@ -5,7 +5,6 @@ import sys
 import torch.nn as nn
 import train as training
 from transformers import BertTokenizer, BertForSequenceClassification
-from datasets import load_dataset
 import numpy as np
 from transformers import AdamW, get_linear_schedule_with_warmup
 from BertClassifier import BertClassifier
@@ -61,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument('--remap', default = "validation", type = str,
                         dest = 'remap', help = 'Remap the validation/text set or all the sets. (default: validation)', choices=["validation", "all"])
     parser.add_argument('--remap_type', default = "random", type = str,
-                        dest = 'remap_type', help = 'what type of remap. freq-high is mapping low to high (default: random)', choices=["random", "freq-high","freq-low"])
+                        dest = 'remap_type', help = 'what type of remap. freq-high is mapping low to high (default: random)', choices=["random", "freq-high","freq-low", "none"])
     parser.add_argument('--cpu', default = False, action = "store_true",
                         dest = 'cpu', help = 'Use cpu instead of a device')
     parser.add_argument('--attacker', default = False, action = "store_true",
@@ -74,12 +73,14 @@ if __name__ == "__main__":
                         dest = 'frequency_window', help = 'Path to input ids frequency. (default: "all")')
     parser.add_argument('--model', default = "bert-base-uncased", type = str,
                         dest = 'model', help = 'What base model to use')
+    parser.add_argument('--finetune', default = False, action="store_true",
+                        dest = 'finetune', help = 'What base model to use')
 
     args = parser.parse_args()
 
     tokenizer = BertTokenizer.from_pretrained(args.model)
     model = BertForSequenceClassification.from_pretrained(args.model)
-    data = load_dataset(args.dataset)
+    #  data = load_dataset(args.dataset)
     fname = args.save.split(".pt")[0] + ".log"
     print(fname)
     log.basicConfig(filename=fname, level=log.INFO)
@@ -102,9 +103,10 @@ if __name__ == "__main__":
     # training mode
     if not args.predict:
         print("Training Model")
+        # data = load_dataset(args.dataset)
         # this is just to create the data from downstream task
-        train = create_data(data, "train")  # READ DATA SST2
-        validation = create_data(data, "validation")
+        train, validation = create_data(args.dataset)  # READ DATA SST2
+        # validation = create_data(data, "validation")
         train_text = train["text"]
         val_text = validation["text"]
         train_labels = torch.tensor(train["label"])
@@ -115,10 +117,11 @@ if __name__ == "__main__":
         val_input_ids, val_attention_mask = encode_text(tokenizer, val_text, MAX_LEN)
 
         # Now remap the tokens to the new tokens
-        if args.remap == "validation" or args.remap == "all":
-            val_input_ids = remapper.remap_input_ids(val_input_ids)
-        if args.remap == "all":
-            train_input_ids = remapper.remap_input_ids(train_input_ids)
+        if not args.finetune:
+            if args.remap == "validation" or args.remap == "all":
+                val_input_ids = remapper.remap_input_ids(val_input_ids)
+            if args.remap == "all":
+                train_input_ids = remapper.remap_input_ids(train_input_ids)
 
         if args.attacker:
             naive_attacker.main(tokenizer, device, train_input_ids, val_input_ids, remapper, args.remap_count)

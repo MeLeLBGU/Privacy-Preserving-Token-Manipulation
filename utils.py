@@ -4,6 +4,8 @@ from tqdm import *
 from transformers import BertTokenizer
 import numpy as np
 import logging as log
+from datasets import load_dataset
+
 
 UNIQUE_TOKENS = [100, 101, 102, 0]
 
@@ -92,13 +94,25 @@ def get_max_len(dataset, tokenizer):
     return max_len
 
 # create dictonairy with text and label from sst2-like datasets
-def create_data(dataset, type):
-    sentence_train = [sent["sentence"] for sent in dataset[type]]
-    labels_train = [sent["label"] for sent in dataset[type]]
-    df = {}
-    df["text"] = sentence_train
-    df["label"] = labels_train
-    return df
+def create_data(dataset):
+    train_val_dict = []
+    data = load_dataset(dataset)
+
+    if "sst2" in dataset:
+        text_key = "sentence"
+        types = ["train", "validation"]
+    elif "imdb" in dataset:
+        text_key = "text"
+        types = ["train", "test"]
+
+    for type in types:
+        df = {}
+        texts = [sent[text_key] for sent in data[type]]
+        labels = [sent["label"] for sent in data[type]]
+        df["text"] = texts
+        df["label"] = labels
+        train_val_dict.append(df)
+    return train_val_dict[0], train_val_dict[1]
 
 
 def get_input_ids_frequency(tokenizer, input_ids):

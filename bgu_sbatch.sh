@@ -12,6 +12,6 @@ source activate Privacy
 
 nvidia-smi -L
 
-python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq.pkl --save=$1 --remap_type=$2 --frequency_window=$3
+python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq.pkl --save=$1 --remap_type=$2 --frequency_window=$3 --dataset=$4 --finetune
 
 
