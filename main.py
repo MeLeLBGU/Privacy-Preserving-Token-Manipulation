@@ -11,7 +11,7 @@ from BertClassifier import BertClassifier
 import train_new as train2
 import test as predict
 from utils import *
-import naive_attacker
+import naive_attacker as naive_attacker
 import logging as log
 import pickle
 from remap_base import *
@@ -64,9 +64,9 @@ if __name__ == "__main__":
     parser.add_argument('--cpu', default = False, action = "store_true",
                         dest = 'cpu', help = 'Use cpu instead of a device')
     parser.add_argument('--attacker', default = False, action = "store_true",
-                        dest = 'attacker', help = 'Initiate attack mode :), get the sentence *')
+                        dest = 'attacker', help = 'Initiate attacker. (default: False)')
     parser.add_argument('--dataset', default = "sst2", type = str,
-                        dest = 'dataset', help = 'What database to use', choices=["sst2", "imdb"])
+                        dest = 'dataset', help = 'What database to use. (default: sst2)', choices=["sst2", "imdb"])
     parser.add_argument('--frequency_path', default = "wiki_freq.pkl", type = str,
                         dest = 'frequency_path', help = 'Path to input ids frequency. (default: "wiki_freq.pkl" - no path).')
     parser.add_argument('--frequency_window', default = "all", type = str,
@@ -82,6 +82,8 @@ if __name__ == "__main__":
     model = BertForSequenceClassification.from_pretrained(args.model)
     #  data = load_dataset(args.dataset)
     fname = args.save.split(".pt")[0] + ".log"
+    f = open(fname, "w")
+    f.close()
     print(fname)
     log.basicConfig(filename=fname, level=log.INFO)
     # prep input
@@ -145,4 +147,3 @@ if __name__ == "__main__":
                                                                      batch_size)
         bert_classifier, optimizer, scheduler, loss = initialize_model(2, test_dataloader)
         predict.predict(bert_classifier, device, test_dataloader, test_labels)
-    training.set_seed(42)  # Set seed for reproducibility

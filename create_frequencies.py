@@ -12,7 +12,7 @@ from BertClassifier import BertClassifier
 import train_new as train2
 import test as predict
 from utils import *
-import naive_attacker
+import Attacker.naive_attacker as naive_attacker
 import pickle
 
 

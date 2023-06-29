@@ -26,6 +26,7 @@ class RemapBase:
     def get_reversed_map(self):
         if self.reverse_map == {}:
             self.create_remap()
+            log.error("Bad use of get reversed map")
         return self.reverse_map
 
     def get_map(self):
@@ -59,27 +60,30 @@ class RemapRandom(RemapBase):
         self.shuffle = shuffle
 
     def create_remap(self):
-        indices_to_shuffle = [i for i in range(len(self.vocab)) if (i % self.remap_count != 0)]
+        # indices_to_shuffle = [i for i in range(len(self.vocab)) if (i % self.remap_count != 0)]
+        indices_to_shuffle = [i for i in range(len(self.vocab))]
+        # we dont want to remap the special characters
+        indices_to_shuffle.pop(101)
+        indices_to_shuffle.pop(100)
         self.remap = {int(key): 0 for key in self.vocab}
         self.reverse_map = {int(key): None for key in self.vocab}
+        self.remap[101] = 101
+        self.remap[102] = 102
+        
         if self.shuffle:
             random.shuffle(indices_to_shuffle)
-        k = 0
-        lst = []
-        for i, token in enumerate(tqdm(self.vocab)):
-            if i % self.remap_count == 0:
-                lst = []
-                new_token = token
-                lst.append(i)  # for the reverse vocabulary
-                self.remap[i] = new_token
-            else:
-                self.remap[int(indices_to_shuffle[k])] = new_token
-                lst.append(int(indices_to_shuffle[k]))
-                k = k + 1
-            if (i + 1) % self.remap_count == 0:
-                self.reverse_map[int(new_token)] = lst
-        log.info("Remap[1000 ] =" + str(self.remap[1000]))
-        log.info("ReverseRemap[1000] =" + str(self.reverse_map[1000]))
+        
+        while indices_to_shuffle != []:
+            token1 = indices_to_shuffle.pop()
+            token2 = indices_to_shuffle.pop()
+            self.remap[token1] = token1
+            self.remap[token2] = token1
+            self.reverse_map[token1] = [token1, token2]
+            self.reverse_map[token2] = [token1, token2]
+        # for test
+        log.info(self.reverse_map)
+        # log.info("Remap[1000 ] =" + str(self.remap[1000]))
+        # log.info("ReverseRemap[1000] =" + str(self.reverse_map[1000]))
 
 
 class RemapFrequency(RemapBase):
@@ -90,7 +94,7 @@ class RemapFrequency(RemapBase):
         elif "low" in freq_type:
             self.freq_type = "low"
         self.window = window
-        print(self.window)
+
         self.vocab = vocab
         if not os.path.exists(freq_path):
             log.error("No frequency dictionary path")
