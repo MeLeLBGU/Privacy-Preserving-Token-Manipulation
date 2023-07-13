@@ -1,0 +1,1 @@
+rank of guess: 15 out of: 16 ratio: 0.9375

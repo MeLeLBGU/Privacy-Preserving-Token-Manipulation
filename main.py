@@ -4,7 +4,7 @@ import sys
 # import pandas as pd
 import torch.nn as nn
 import train as training
-from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import AutoTokenizer, RobertaForSequenceClassification
 import numpy as np
 from transformers import AdamW, get_linear_schedule_with_warmup
 from BertClassifier import BertClassifier
@@ -14,17 +14,18 @@ from utils import *
 import naive_attacker as naive_attacker
 import logging as log
 import pickle
+import copy
 from remap_base import *
 MAX_LEN = 66
 
 
 
 
-def initialize_model(epochs, dataloader):
+def initialize_model(model, epochs, dataloader):
     """Initialize the Bert Classifier, the optimizer and the learning rate scheduler.
     """
     # Instantiate Bert Classifier
-    bert_classifier = BertClassifier(freeze_bert = False)
+    bert_classifier = BertClassifier(model, freeze_bert = False)
 
     # Tell PyTorch to run the model on GPU
     bert_classifier.to(device)
@@ -57,8 +58,8 @@ if __name__ == "__main__":
                         dest = 'remap_count', help = 'How many tokens are we going to remap (default: 2)')
     parser.add_argument('--save', default = "result.pt", type = str,
                         dest = 'save', help = 'Save mode path. (default: result.pt)')
-    parser.add_argument('--remap', default = "validation", type = str,
-                        dest = 'remap', help = 'Remap the validation/text set or all the sets. (default: validation)', choices=["validation", "all"])
+    parser.add_argument('--remap', default = "all", type = str,
+                        dest = 'remap', help = 'Remap the validation/text set or all the sets. (default: all)', choices=["validation", "all"])
     parser.add_argument('--remap_type', default = "random", type = str,
                         dest = 'remap_type', help = 'what type of remap. freq-high is mapping low to high (default: random)', choices=["random", "freq-high","freq-low", "none"])
     parser.add_argument('--cpu', default = False, action = "store_true",
@@ -70,16 +71,16 @@ if __name__ == "__main__":
     parser.add_argument('--frequency_path', default = "wiki_freq.pkl", type = str,
                         dest = 'frequency_path', help = 'Path to input ids frequency. (default: "wiki_freq.pkl" - no path).')
     parser.add_argument('--frequency_window', default = "all", type = str,
-                        dest = 'frequency_window', help = 'Path to input ids frequency. (default: "all")')
-    parser.add_argument('--model', default = "bert-base-uncased", type = str,
+                        dest = 'frequency_window', help = 'What window. (default: "all")')
+    parser.add_argument('--model', default = "roberta-base", type = str,
                         dest = 'model', help = 'What base model to use')
     parser.add_argument('--finetune', default = False, action="store_true",
                         dest = 'finetune', help = 'What base model to use')
 
     args = parser.parse_args()
-
-    tokenizer = BertTokenizer.from_pretrained(args.model)
-    model = BertForSequenceClassification.from_pretrained(args.model)
+    attacker_file = "attacker"
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    model = RobertaForSequenceClassification.from_pretrained(args.model)
     #  data = load_dataset(args.dataset)
     fname = args.save.split(".pt")[0] + ".log"
     f = open(fname, "w")
@@ -98,10 +99,12 @@ if __name__ == "__main__":
         vocab = create_vocabulary(tokenizer=tokenizer)  # bert vocab
 
     if args.remap_type == "random":
-        remapper = RemapRandom(vocab)
+        remapper = RemapRandom(vocab, forbidden_tokens=args.attacker)
     elif "freq" in args.remap_type:
-        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, args.frequency_window)
-
+        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, forbid=args.attacker, window=args.frequency_window)
+    attacker_file = attacker_file + "_" + args.remap_type
+    attacker_file = attacker_file + "_" + args.dataset
+    attacker_file = attacker_file + ".json"
     # training mode
     if not args.predict:
         print("Training Model")
@@ -115,9 +118,12 @@ if __name__ == "__main__":
         val_labels = torch.tensor(validation["label"])
 
         # preprocess the text to create the input ids
-        train_input_ids, train_attention_mask = encode_text(tokenizer, train_text, MAX_LEN)
-        val_input_ids, val_attention_mask = encode_text(tokenizer, val_text, MAX_LEN)
-
+        # note that if we are in attacking mode, we want to truncate all the special tokens, and the padding, so we sent as an argument "not args.attacker" which tells the
+        # encode_text to remove these tokens
+        train_input_ids, train_attention_mask = encode_text(tokenizer, train_text, MAX_LEN, not args.attacker)
+        val_input_ids, val_attention_mask = encode_text(tokenizer, val_text, MAX_LEN, not args.attacker)
+        if args.attacker:
+            original_train_input_ids = copy.deepcopy(train_input_ids) # save the original tokens!
         # Now remap the tokens to the new tokens
         if not args.finetune:
             if args.remap == "validation" or args.remap == "all":
@@ -126,15 +132,16 @@ if __name__ == "__main__":
                 train_input_ids = remapper.remap_input_ids(train_input_ids)
 
         if args.attacker:
-            naive_attacker.main(tokenizer, device, train_input_ids, val_input_ids, remapper, args.remap_count)
+            print("Attack mode!")
+            naive_attacker.main(tokenizer, device, train_input_ids, original_train_input_ids, remapper, args.remap_count, attacker_file)
             exit(0)
         # Create the DataLoader for our training set
         train_data, train_sampler, train_dataloader = create_dataloader(train_input_ids, train_attention_mask,
                                                                         train_labels, batch_size)
         val_data, val_sampler, val_dataloader = create_dataloader(val_input_ids, val_attention_mask, val_labels,
                                                                   batch_size)
-        bert_classifier, optimizer, scheduler, loss = initialize_model(2, train_dataloader)
-
+        bert_classifier, optimizer, scheduler, loss = initialize_model(args.model, 3, train_dataloader)
+        print("Starting to train!")
         train2.train(bert_classifier, epochs = 3, train_dataloader = train_dataloader, device = device,
                      cross_entropy = loss, optimizer = optimizer
                      , val_dataloader = val_dataloader, save = args.save)

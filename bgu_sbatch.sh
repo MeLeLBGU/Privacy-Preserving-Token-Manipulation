@@ -6,12 +6,12 @@
 #SBATCH --gpus=1 ### number of GPUs. Choosing type e.g.: #SBATCH --gpus=gtx_1080:1 , or rtx_2080, or rtx_3090 . Allocating more than 1 requires the IT team’s permission
 ##SBATCH --tasks=1 # 1 process – use for processing of few programs concurrently in a job (with srun). Use just 1 otherwise
 
-
+module load cuda/11.2
 #module load anaconda
-source activate Privacy
-
+#source activate Privacy
+#conda activate Privacy
 nvidia-smi -L
 
-python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq.pkl --save=$1 --remap_type=$2 --frequency_window=$3 --dataset=$4 --finetune
-
+#python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --save=$1 --remap_type=$2 --frequency_window=$3 --dataset=$4 #--finetune
+python create_frequencies.py --save=wiki_freq_roberta2.pkl --model=roberta-base
 

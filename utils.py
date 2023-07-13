@@ -1,32 +1,29 @@
 import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from tqdm import *
-from transformers import BertTokenizer
 import numpy as np
 import logging as log
 from datasets import load_dataset
+            
 
-
-UNIQUE_TOKENS = [100, 101, 102, 0]
-
-
-def get_text_from_input_ids(tokenizer, input_ids):
+def get_text_from_input_ids(tokenizer, input_ids, skip_special=False):
     """
     from input ids it returns the input ids
     """
     texts = []
     if not isinstance(input_ids[0], list):
-        return tokenizer.decode(input_ids, clean_up_tokenization_spaces = True, skip_special_tokens = True)
+        return tokenizer.decode(input_ids, clean_up_tokenization_spaces = False, skip_special_tokens = skip_special)
     for ids in input_ids:
-        text = tokenizer.decode(ids)#, clean_up_tokenization_spaces = True, skip_special_tokens = True)
+        text = tokenizer.decode(ids, clean_up_tokenization_spaces = False, skip_special_tokens = skip_special)
         texts.append(text)
     return texts
 
 
-def get_input_ids_from_text(tokenizer, data):
+def get_input_ids_from_text(tokenizer, data, with_special_tokens=True):
     input_ids = []
     for sent in tqdm(data):
-        text = tokenizer.encode(sent)
+        
+        text = tokenizer.encode(sent, add_special_tokens=with_special_tokens, pad_to_max_length = not with_special_tokens)  # Pad sentence to max lengthtruncation=not with_special_tokens)
         input_ids.append(text)
     log.info("Done generating input ids from text!")
     return input_ids
@@ -52,18 +49,18 @@ def encode_text(tokenizer, data, max_len, with_seperation=True):
             text = sent,  # Preprocess sentence
             add_special_tokens = with_seperation,  # Add `[CLS]` and `[SEP]`
             max_length = max_len,  # Max length to truncate/pad
-            pad_to_max_length = True,  # Pad sentence to max length
+            pad_to_max_length = with_seperation,  # Pad sentence to max length
             # return_tensors='pt',           # Return PyTorch tensor
             return_attention_mask = True  # Return attention mask
         )
-
         # Add the outputs to the lists
         input_ids.append(encoded_sent.get('input_ids'))
         attention_masks.append(encoded_sent.get('attention_mask'))
 
     # Convert lists to tensors
-    input_ids = torch.tensor(input_ids)
-    attention_masks = torch.tensor(attention_masks)
+    if with_seperation:
+        input_ids = torch.tensor(input_ids)
+        attention_masks = torch.tensor(attention_masks)
 
     return input_ids, attention_masks
 

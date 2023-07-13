@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from transformers import BertModel
+from transformers import BertModel, AutoModel
 
 
 # Create the BertClassfier class
@@ -8,7 +8,7 @@ class BertClassifier(nn.Module):
     """Bert Model for Classification Tasks.
     """
 
-    def __init__(self, freeze_bert=False):
+    def __init__(self, model, freeze_bert=False):
         """
         @param    bert: a BertModel object
         @param    classifier: a torch.nn.Module classifier
@@ -19,7 +19,7 @@ class BertClassifier(nn.Module):
         D_in, H, D_out = 768, 512, 2
 
         # Instantiate BERT model
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        self.bert = AutoModel.from_pretrained(model)
 
         # Instantiate an one-layer feed-forward classifier
         self.classifier = nn.Sequential(

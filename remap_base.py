@@ -1,13 +1,10 @@
 from collections import defaultdict
 import string
 import os
-import tokenizers
 import re
-from transformers import BertTokenizer
 import random
 import numpy as np
 import utils
-import collections
 import logging as log
 from tqdm import tqdm
 import pickle
@@ -22,7 +19,10 @@ class RemapBase:
     def create_remap(self):
         # implement the remap
         pass
-
+    
+    def get_unique(self):
+        return ""
+    
     def get_reversed_map(self):
         if self.reverse_map == {}:
             self.create_remap()
@@ -52,29 +52,60 @@ class RemapBase:
 
 
 class RemapRandom(RemapBase):
-    def __init__(self, vocab, shuffle=True, remap_count=2):
+    def __init__(self, vocab, shuffle=True, forbidden_tokens=False, remap_count=2):
         super().__init__()
         log.info("You chose to remap the inputs ids randomly")
         self.vocab = vocab
         self.remap_count = remap_count
         self.shuffle = shuffle
-
+        self.forbid = forbidden_tokens
+        self.forbidden_tokens = []
+    
+    def get_unique(self):
+        return "random"
+    
     def create_remap(self):
+        np.random.seed(0)
+
         # indices_to_shuffle = [i for i in range(len(self.vocab)) if (i % self.remap_count != 0)]
         indices_to_shuffle = [i for i in range(len(self.vocab))]
-        # we dont want to remap the special characters
-        indices_to_shuffle.pop(101)
-        indices_to_shuffle.pop(100)
         self.remap = {int(key): 0 for key in self.vocab}
         self.reverse_map = {int(key): None for key in self.vocab}
-        self.remap[101] = 101
-        self.remap[102] = 102
+
+        if self.forbid:
+            # there are some tokens that we do not want to map because they will cause incosisntency
+            a_file = open("roberta_gpt_mapper.pkl", "rb")
+            roberta_gpt_mapper = pickle.load(a_file)
+            forbidden = []
+            for i in range(len(roberta_gpt_mapper)):
+                if roberta_gpt_mapper[i] == -1:
+                    forbidden.append(i)
+                    self.remap[i] = i
+            forbidden.sort(reverse=True)
+            for rm in forbidden:
+                indices_to_shuffle.pop(rm)
+            a_file.close()
+        else:
+            # we dont want to remap the special characters
+            indices_to_shuffle.pop(50264)
+            indices_to_shuffle.pop(2)
+            indices_to_shuffle.pop(1)
+            indices_to_shuffle.pop(0)
+            self.remap[2] = 2
+            self.remap[50264] = 50264
+            self.remap[1] = 1
+            self.remap[0] = 0
         
         if self.shuffle:
+            np.random.seed(0)
             random.shuffle(indices_to_shuffle)
         
         while indices_to_shuffle != []:
             token1 = indices_to_shuffle.pop()
+            if indices_to_shuffle == []: # odd vocab size
+                self.remap[token1] = token1
+                self.reverse_map[token1] = [token1, token1]
+                break
             token2 = indices_to_shuffle.pop()
             self.remap[token1] = token1
             self.remap[token2] = token1
@@ -87,7 +118,7 @@ class RemapRandom(RemapBase):
 
 
 class RemapFrequency(RemapBase):
-    def __init__(self, vocab, freq_path, freq_type, window="all"):
+    def __init__(self, vocab, freq_path, freq_type, forbid=False, window="all"):
         super().__init__()
         if "high" in freq_type:
             self.freq_type = "high"
@@ -106,19 +137,53 @@ class RemapFrequency(RemapBase):
             log.error("No frequency dictionary path")
             exit(1)
         a_file.close()
-
+        self.forbid = forbid
+        self.forbidden_tokens = []
+    
+    def get_unique(self):
+        return "freq" + self.freq_type + self.window
+    
     def create_remap(self):
-        sorted_freq_ids = sorted(self.freq_ids.items(), key=lambda x: x[1], reverse=True)
+        self.freq_ids = sorted(self.freq_ids.items(), key=lambda x: x[0], reverse=False)
+
         self.remap = {int(key): 0 for key in self.vocab}
         self.reverse_map = {int(key): None for key in self.vocab}
-        log.info("Freq:", sorted_freq_ids)
+        if self.forbid:
+            # there are some tokens that we do not want to map because they will cause incosisntency
+            a_file = open("roberta_gpt_mapper.pkl", "rb")
+            roberta_gpt_mapper = pickle.load(a_file)
+            for i in range(len(roberta_gpt_mapper)):
+                if roberta_gpt_mapper[i] == -1:
+                    self.forbidden_tokens.append(i)
+                    self.remap[i] = i
+            self.forbidden_tokens.sort(reverse=True)
+            for rm in self.forbidden_tokens:
+                self.freq_ids.pop(rm)
+            a_file.close()
+        else:
+            # we dont want to remap the special characters
+            self.freq_ids.pop(50264)
+            self.freq_ids.pop(2)
+            self.freq_ids.pop(1)
+            self.freq_ids.pop(0)
+            self.remap[2] = 2
+            self.remap[50264] = 50264
+            self.remap[1] = 1
+            self.remap[0] = 0
         
-        for i in tqdm(range(int(len(self.vocab)/2))):
+        sorted_freq_ids = sorted(self.freq_ids, key=lambda x: x[1], reverse=True)
+
+        #for i in tqdm(range(int(len(self.vocab)/2))):
+        while sorted_freq_ids != []:
 
             high_freq_id, _ = sorted_freq_ids.pop(0)
             low_id = self.get_low_freq_index(high_freq_id)
             while low_id >= len(sorted_freq_ids):
                 low_id = low_id - 1
+            if sorted_freq_ids == []: # odd vocab size
+                self.remap[high_freq_id] = high_freq_id
+                self.reverse_map[high_freq_id] = [high_freq_id, high_freq_id]
+                break
             low_freq_id,_ = sorted_freq_ids.pop(low_id)
 
             high_freq_id = int(high_freq_id)
@@ -140,9 +205,9 @@ class RemapFrequency(RemapBase):
 
     def get_low_freq_index(self, i):
         if self.window == "all":
-            return -(i + 1)
+            return -1
         elif self.window == "half":
-            return int(i + (len(self.vocab)/2))
+            return int(i + (len(self.freq_ids)/2))
         else:
             return i + int(self.window) 
 
