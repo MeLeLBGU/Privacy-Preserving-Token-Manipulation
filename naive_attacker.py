@@ -6,6 +6,7 @@ import torch
 from scipy.special import softmax
 import utils
 import json
+import os
 import copy
 import time
 from typing import *
@@ -52,19 +53,6 @@ class NucleusBeamSearch():
         # candidate_text[i] candidate_text[i+1] suffix..
         self.removed_per_step.append(0)
         
-        # if self.step % 10 == 0:
-        #     # print("Finished 2^10 candidates with time:", time.time() - self.time)
-        #     print("Candidates to check", len(candidates_tokens))
-        #     print("Removed:", np.sum(self.removed_per_step))
-
-        if len(candidates_tokens) > 2:
-            for i in range(0, len(candidates_tokens), 2):
-                # Verify that these two candidates are from the same text...
-                if candidates_tokens[i][0:-1] != candidates_tokens[i+1][0:-1]:
-                    print("The two candidates are not corresponding to one another", candidates_tokens[i], candidates_tokens[i+1])
-                    print(candidates_tokens)
-                    # log.error("The two candidates are not corresponding to one another", candidates_tokens[i], candidates_tokens[i+1])
-                    exit(0)
 
         # before we do the nuclus beam search we need to transform the input ids to text
         # candidates_texts = utils.get_text_from_input_ids(self.tokenizer, candidates_tokens, skip_special=True)
@@ -121,9 +109,6 @@ class NucleusBeamSearch():
                     probabilities.append(prob * prefix_probability)
                 # verify the probs..
         
-        # if total_probability < self.percentage_target:
-        #     print("no more remov")
-        #     return candidates_tokens, probabilities  # no need to rmove
         
         # will be helpful to sort the array
         prob_candidates.sort(key=mysort_criteria)
@@ -131,7 +116,7 @@ class NucleusBeamSearch():
         indices_to_remove = []
 
         if self.step > 5: # only after we have atleast 2^6 candidates we will consider to remove them
-            if len(probabilities) > 2000: # if we are looking at too much candidates let's remove some of em
+            if len(probabilities) > 1000: # if we are looking at too much candidates let's remove some of em
                 if self.percentage_target > self.max_percentage_target:
                     self.percentage_target = self.percentage_target - self.remove_percentage# lower threshold
                 else:
@@ -168,7 +153,11 @@ def create_possible_permutation(reverse_vocab, input_ids, permu_count, NBS : Nuc
     print("Total candidates to check:", len(input_ids))
     for i, token in enumerate(input_ids):
         token = int(token)
-        token_choices = get_token_choices(reverse_vocab, token, permu_count)
+        try:
+            token_choices = get_token_choices(reverse_vocab, token, permu_count)
+        except:
+            print("bad tokens")
+            return None, None
         # print("create_possible_permutation:", token, token_choices)
         permutations = [x[0] + [x[1]] for x in list(product(permutations.copy(), token_choices))]
         permutations, prefix_probabilities = NBS.nucleus_beam_search(permutations, prefix_probabilities)
@@ -215,19 +204,25 @@ def main(tokenizer, device, mapped_train_input_ids, original_train_input_ids, re
     scorer = LMScorer.from_pretrained("gpt2", device = device, batch_size = 1)
     NBS = NucleusBeamSearch(scorer, 0.0, tokenizer)
     print(attacker_file)
-    f = open(attacker_file, "w")
-    data = []
-    topk = 5
-    f.close()
-    
+    if os.path.exists(attacker_file):
+        with open(attacker_file, "r") as f:
+            dict1 = json.load(f)
+            last_index = int(list(dict1.keys())[-1])
+    else:
+        f = open(attacker_file, "w")
+        dict1 = {}
+        f.close()
+        last_index = -1
     # we assume that the train input id is clean for special tokens
     for i, train_input_id in enumerate(mapped_train_input_ids):
         print("##### Starting a new permutation ######")
         original_text = utils.get_text_from_input_ids(tokenizer, original_train_input_ids[i])
         print("text is: ", original_text)
+        if i <= last_index:
+            continue # we already added it to the json file
         t1 = time.time()
         permutations, probabilities = create_possible_permutation(remapper.get_reversed_map(), train_input_id, permu_count, NBS)
-        prob_of_real_text = 0.001
+        prob_of_real_text = 0.0
         if permutations: 
 
             # get the real sentence probability and remove it from the list
@@ -247,29 +242,29 @@ def main(tokenizer, device, mapped_train_input_ids, original_train_input_ids, re
             token_hit, top5tokens = get_token_hit(prob_permu, permu_of_real_text)
             rank = get_rank_of_text(probabilities, prob_of_real_text)
             
-            dict = {str(i): {"sentence": original_text,
+            dict1[str(i)] = {"sentence": original_text,
                             "cumulative_probability": NBS.percentage_target,
                             "rank": len(probabilities) - rank + 1,
                             "candidates_checked": len(probabilities) + 1,
                             "real_sentence_probability": prob_of_real_text,
                             "token_hit": token_hit,
+                            "tokens": original_train_input_ids[i],
                             "removed_per_step": NBS.removed_per_step,
                             "computation_time": time.time() - t1
-                            }}
-            # print(dict)
+                            }
         else:
             # we couldn't converge :(
-            dict = {str(i): {"sentence": original_text,
-                        "rank": -1,
-                        "cumulative_probability": 0,
-                        "candidates_checked": -1,
-                        "real_sentence_probability": 0.0,
-                        "token_hit": [-1],
-                        "removed_per_step": NBS.removed_per_step,
-                        "computation_time": -1
-                        }} 
-        data.append(dict)
+            dict1[str(i)] = {"sentence": original_text,
+                            "rank": -1,
+                            "cumulative_probability": 0,
+                            "candidates_checked": -1,
+                            "real_sentence_probability": 0.0,
+                            "token_hit": [i],
+                            "removed_per_step": NBS.removed_per_step,
+                            "computation_time": -1,
+                            "tokens": original_train_input_ids[i]
+                        }
         if i % 50 == 49:
             with open(attacker_file, "r+") as outfile:
-                json.dump(data, outfile, indent=4)
+                json.dump(dict1, outfile, indent=4)
         NBS.reset()

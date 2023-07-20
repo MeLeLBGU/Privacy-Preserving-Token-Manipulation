@@ -36,6 +36,8 @@ class RemapBase:
 
     # we assume that the vocab is id: 'word'
     def remap_input_ids(self, input_ids):
+        survived_tokens = 0
+        total_tokens = 0 
         if self.remap == {}:
             self.create_remap()
         new_input_ids = input_ids
@@ -44,10 +46,12 @@ class RemapBase:
             for j, token in enumerate(ids):
                 if token == 0:
                     continue
-
+                if int(token) == self.remap[int(token)]:
+                    survived_tokens = survived_tokens + 1
                 new_input_ids[i][j] = self.remap[int(token)]
-            # print(new_input_ids[i])
-            # exit(1)
+                total_tokens = total_tokens + 1
+        print("survived tokens:", survived_tokens, survived_tokens/ total_tokens)
+        exit(1)
         return new_input_ids
 
 
