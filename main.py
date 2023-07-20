@@ -4,7 +4,7 @@ import sys
 # import pandas as pd
 import torch.nn as nn
 import train as training
-from transformers import AutoTokenizer, RobertaForSequenceClassification
+from transformers import AutoTokenizer, RobertaForSequenceClassification, AutoModel
 import numpy as np
 from transformers import AdamW, get_linear_schedule_with_warmup
 from BertClassifier import BertClassifier
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     attacker_file = "attacker"
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = RobertaForSequenceClassification.from_pretrained(args.model)
+    # model = AutoModel.from_pretrained(args.model)
     #  data = load_dataset(args.dataset)
     fname = args.save.split(".pt")[0] + ".log"
     f = open(fname, "w")
@@ -99,12 +99,15 @@ if __name__ == "__main__":
         vocab = create_vocabulary(tokenizer=tokenizer)  # bert vocab
 
     if args.remap_type == "random":
-        remapper = RemapRandom(vocab, forbidden_tokens=args.attacker)
+        remapper = RemapRandom(vocab, forbidden_tokens=args.attacker, remap_count=args.remap_count)
     elif "freq" in args.remap_type:
         remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, forbid=args.attacker, window=args.frequency_window)
-    attacker_file = attacker_file + "_" + args.remap_type
+    elif "conv" in args.remap_type:
+        remapper = RemapConv(args.model)
+    attacker_file = attacker_file + "_" + str(args.remap_count) + args.remap_type
     attacker_file = attacker_file + "_" + args.dataset
     attacker_file = attacker_file + ".json"
+    
     # training mode
     if not args.predict:
         print("Training Model")
@@ -127,9 +130,9 @@ if __name__ == "__main__":
         # Now remap the tokens to the new tokens
         if not args.finetune:
             if args.remap == "validation" or args.remap == "all":
-                val_input_ids = remapper.remap_input_ids(val_input_ids)
+                val_input_ids = remapper.remap_input_ids(val_input_ids, val_attention_mask)
             if args.remap == "all":
-                train_input_ids = remapper.remap_input_ids(train_input_ids)
+                train_input_ids = remapper.remap_input_ids(train_input_ids, train_attention_mask)
 
         if args.attacker:
             print("Attack mode!")

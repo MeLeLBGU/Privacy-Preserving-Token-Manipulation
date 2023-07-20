@@ -22,11 +22,12 @@ def mysort_criteria(e: Tuple):
     return e[0]
 
 class NucleusBeamSearch():
-    def __init__(self, scorer: LMScorer, percentage_target: float, tokenizer):
-        self.percentage_target = percentage_target
+    def __init__(self, scorer: LMScorer, percentage_target: float, tokenizer, permu_count):
+        self.percentage_target = 0.9975
         self.scorer = scorer
         self.tokenizer = tokenizer
         self.removed_sentences = 0
+        self.remove_percentage = 0.0025
         self.removed_per_step = [0] #* 66 # 66 max length
         self.step = -1
         a_file = open("roberta_gpt_mapper.pkl", "rb")
@@ -36,6 +37,7 @@ class NucleusBeamSearch():
         self.time = time.time()
         self.dynamically = True
         self.max_percentage_target = percentage_target
+        self.permu_count = permu_count
 
     def reset(self) :
         self.step = -1
@@ -53,7 +55,6 @@ class NucleusBeamSearch():
         # candidate_text[i] candidate_text[i+1] suffix..
         self.removed_per_step.append(0)
         
-
         # before we do the nuclus beam search we need to transform the input ids to text
         # candidates_texts = utils.get_text_from_input_ids(self.tokenizer, candidates_tokens, skip_special=True)
         
@@ -74,53 +75,46 @@ class NucleusBeamSearch():
         total_probability = 0.0 #1 - np.sum(prefix_probabilities)
         prob_candidates = [] # first item in tuple is the probability, and the second is the candidate index
         probabilities = []
+        candidates_logits = []
+        logits = []
         # for i, candidate_text in enumerate(candidates_texts):
         for i, candidate_token in enumerate(gpt_tokens):
-            # if len(gpt_tokens) > 2000 and i % 1000 == 0:
-                # print("Iteration:", i, "out of:", len(gpt_tokens))
-            if i % 2 == 0:
-                prefix_probability = prefix_probabilities[int(i/2)]
+            if i % self.permu_count != self.permu_count - 1:
                 candidate = ' '.join(map(str, candidate_token))
                 # we batch it now
                 prob1, ids1, tokens1, logits1 = self.scorer.tokens_score(candidate) # should return the logit
+                logits.append(logits1[-2])
             else:
                 candidate = ' '.join(map(str, candidate_token))
                 prob2, ids2, tokens2, logits2 = self.scorer.tokens_score(candidate) # should return the logit
                 # prob, ids, tokens, logits = self.scorer.tokens_score([candidate1, candidate2]) # should return the logit
+                logits.append(logits2[-2])# -2 because -1 is the end of sentence token
+                # prefix_probability = prefix_probabilities[int((i - self.permu_count + 1)/self.permu_count)]
+                candidates_logits.append(logits)
+                logits = []
 
-                # safe check the token lengths..
-                if len(prob1) != len(prob2):
-                    print("candidates texts:", candidates_texts[i-1], candidates_texts[i])
-                    print("candidates tokens:", tokens1,tokens2)
-                    print("candidates gpt tokens:", gpt_tokens[i-1], gpt_tokens[i])
-                    print("candidates gpt text:", self.gpt_tokenizer.decode(gpt_tokens[i-1]), self.gpt_tokenizer.decode(gpt_tokens[i]))
-                    print("candidates ids:", ids1,ids2)
-                    print("candidates probs:", prob1,prob2)
-                    print("The two candidates are not the same length", tokens1, tokens2)
-                    return None, None
-                # Now that we have the two id candidates, and their token score we will softmax it and multiply
-                # it with the probability of the prefix
-                # the last value of logits is the EoS, so we take 1 before that
-                # print(prob2, ids2, tokens2, logits2)
-                probs = softmax([logits1[-2], logits2[-2]])
-                for j, prob in enumerate(probs):
-                    total_probability = total_probability + prob * prefix_probability
-                    prob_candidates.append((prob * prefix_probability, (i-1) + j))
-                    probabilities.append(prob * prefix_probability)
-                # verify the probs..
+       # i-1 +j
+       # i - 2 + j
+        for i, logits_with_same_prefix in enumerate(candidates_logits):
+            prefix_probability = prefix_probabilities[i]
+            probs = softmax(logits_with_same_prefix)
+            # print(prefix_permutations, probs)
+            for j, prob in enumerate(probs):
+                total_probability = total_probability + prob * prefix_probability
+                prob_candidates.append((prob * prefix_probability, i*len(probs) + j))
+                probabilities.append(prob * prefix_probability)
         
         
         # will be helpful to sort the array
         prob_candidates.sort(key=mysort_criteria)
-        
         indices_to_remove = []
 
-        if self.step > 5: # only after we have atleast 2^6 candidates we will consider to remove them
-            if len(probabilities) > 1000: # if we are looking at too much candidates let's remove some of em
+        if self.step > 4: # only after we have atleast 2^6 candidates we will consider to remove them
+            if len(probabilities) > 250: # if we are looking at too much candidates let's remove some of em
                 if self.percentage_target > self.max_percentage_target:
                     self.percentage_target = self.percentage_target - self.remove_percentage# lower threshold
                 else:
-                    print("Bad probability")
+                    print("Bad probability", len(probabilities), self.max_percentage_target,self.percentage_target,self.step)
                     return None, None
                 # print("allowing the removal of more candidates", self.step, self.percentage_target)
             for i in range(len(prob_candidates)):
@@ -131,7 +125,6 @@ class NucleusBeamSearch():
                     self.removed_per_step[self.step] = self.removed_per_step[self.step] + 1
                 else:
                     break
-
         if indices_to_remove != []:
             ## safe removal, we mark the 
             for index in sorted(indices_to_remove, reverse=True):
@@ -145,8 +138,6 @@ def create_possible_permutation(reverse_vocab, input_ids, permu_count, NBS : Nuc
     # Loop:
     # c = [x[0] + [x[1]] for x in list(product(a.copy(), [4, 5]))]
 
-    # token_choices1 = get_token_choices(reverse_vocab, input_ids[0], permu_count)
-    # token_choices2 = get_token_choices(reverse_vocab, input_ids[1], permu_count)
     prefix_probabilities = [1.0]
     permutations = list(map(lambda x: list(x), product()))# this is just init [[]]
     # use pqdm ot tqdm
@@ -154,7 +145,7 @@ def create_possible_permutation(reverse_vocab, input_ids, permu_count, NBS : Nuc
     for i, token in enumerate(input_ids):
         token = int(token)
         try:
-            token_choices = get_token_choices(reverse_vocab, token, permu_count)
+            token_choices = get_token_choices(reverse_vocab, token)
         except:
             print("bad tokens")
             return None, None
@@ -167,15 +158,11 @@ def create_possible_permutation(reverse_vocab, input_ids, permu_count, NBS : Nuc
     return permutations, prefix_probabilities
 
 
-def get_token_choices(reverse_vocab, token, permu_count=2):
+def get_token_choices(reverse_vocab, token):
     token_choices = []
-    for i in range(permu_count):
+    for i in range(len(reverse_vocab[int(token)])):
         token_choices.append(reverse_vocab[int(token)][i])
     return token_choices
-
-
-def get_scores(guess_texts, scorer, reduce_type="mean"):
-    return scorer.sentence_score(guess_texts, reduce=reduce_type)
 
 
 def get_rank_of_text(scores, real_score):
@@ -202,7 +189,8 @@ def get_token_hit(permutations, real_permutation, topk=5):
 
 def main(tokenizer, device, mapped_train_input_ids, original_train_input_ids, remapper: RemapBase, permu_count, attacker_file):
     scorer = LMScorer.from_pretrained("gpt2", device = device, batch_size = 1)
-    NBS = NucleusBeamSearch(scorer, 0.0, tokenizer)
+    reversed_mapper = remapper.get_reversed_map()
+    NBS = NucleusBeamSearch(scorer, 0.0, tokenizer, len(reversed_mapper[15]))
     print(attacker_file)
     if os.path.exists(attacker_file):
         with open(attacker_file, "r") as f:
@@ -221,7 +209,7 @@ def main(tokenizer, device, mapped_train_input_ids, original_train_input_ids, re
         if i <= last_index:
             continue # we already added it to the json file
         t1 = time.time()
-        permutations, probabilities = create_possible_permutation(remapper.get_reversed_map(), train_input_id, permu_count, NBS)
+        permutations, probabilities = create_possible_permutation(reversed_mapper, train_input_id, permu_count, NBS)
         prob_of_real_text = 0.0
         if permutations: 
 

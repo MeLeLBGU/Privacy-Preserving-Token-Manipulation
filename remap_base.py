@@ -7,8 +7,10 @@ import numpy as np
 import utils
 import logging as log
 from tqdm import tqdm
+from transformers import AutoModel
 import pickle
-
+import torch
+import sklearn.metrics.pairwise as sklearn
 
 class RemapBase:
     def __init__(self):
@@ -35,13 +37,13 @@ class RemapBase:
         return self.remap
 
     # we assume that the vocab is id: 'word'
-    def remap_input_ids(self, input_ids):
+    def remap_input_ids(self, input_ids, attention_mask):
         survived_tokens = 0
         total_tokens = 0 
         if self.remap == {}:
             self.create_remap()
         new_input_ids = input_ids
-        cpy = input_ids
+        # cpy = input_ids
         for i, ids in enumerate(input_ids):
             for j, token in enumerate(ids):
                 if token == 0:
@@ -51,9 +53,68 @@ class RemapBase:
                 new_input_ids[i][j] = self.remap[int(token)]
                 total_tokens = total_tokens + 1
         print("survived tokens:", survived_tokens, survived_tokens/ total_tokens)
-        exit(1)
         return new_input_ids
+    
+    def remove_forbidden_tokens(self, indices_to_shuffle, forbid):
+        if forbid:
+            a_file = open("roberta_gpt_mapper.pkl", "rb")
+            roberta_gpt_mapper = pickle.load(a_file)
+            forbidden = []
+            for i in range(len(roberta_gpt_mapper)):
+                if roberta_gpt_mapper[i] == -1:
+                    forbidden.append(i)
+                    self.remap[i] = i
+            forbidden.sort(reverse=True)
+            for rm in forbidden:
+                indices_to_shuffle.pop(rm)
+            a_file.close()
+        else:
+            indices_to_shuffle.pop(50264)
+            indices_to_shuffle.pop(2)
+            indices_to_shuffle.pop(1)
+            indices_to_shuffle.pop(0)
+            self.remap[2] = 2
+            self.remap[50264] = 50264
+            self.remap[1] = 1
+            self.remap[0] = 0
 
+class RemapConv(RemapBase):
+    def __init__(self, model):
+        super().__init__()
+        model1 = AutoModel.from_pretrained(model)
+        self.word_embeddings = model1.embeddings.word_embeddings.weight # matrix 50265x768, lookup table
+        self.similarity_score = sklearn.cosine_similarity
+
+    def get_unique(self):
+        return "conv"
+    
+    def remap_input_ids(self, input_ids, attention_mask):
+        survived_tokens = 0
+        total_tokens = 0 
+        new_input_ids = input_ids
+        # cpy = input_ids
+        for i, tokens in enumerate(input_ids):
+            for j in range(len(tokens)):
+                tokens_to_fuse, weights = self.get_tokens_and_weights(tokens, j)
+                new_embedding_vector = []
+                for token, weight in zip(tokens_to_fuse, weights):
+                    new_embedding_vector = new_embedding_vector + self.word_embeddings[token] * weight
+
+
+        return new_input_ids
+    
+    def get_tokens_and_weights(self, tokens, j):
+        tokens_to_fuse = []
+        weights = []
+        if j != 0:
+            tokens_to_fuse.append[tokens[j-1]]
+            weights.append(0.25)
+        tokens_to_fuse.append(tokens[j])
+        weights.append(0.5)
+        if tokens[j+1] != 0:
+            tokens_to_fuse.append[tokens[j+1]]
+            weights.append(0.25)
+        return tokens_to_fuse, weights
 
 class RemapRandom(RemapBase):
     def __init__(self, vocab, shuffle=True, forbidden_tokens=False, remap_count=2):
@@ -76,50 +137,28 @@ class RemapRandom(RemapBase):
         self.remap = {int(key): 0 for key in self.vocab}
         self.reverse_map = {int(key): None for key in self.vocab}
 
-        if self.forbid:
-            # there are some tokens that we do not want to map because they will cause incosisntency
-            a_file = open("roberta_gpt_mapper.pkl", "rb")
-            roberta_gpt_mapper = pickle.load(a_file)
-            forbidden = []
-            for i in range(len(roberta_gpt_mapper)):
-                if roberta_gpt_mapper[i] == -1:
-                    forbidden.append(i)
-                    self.remap[i] = i
-            forbidden.sort(reverse=True)
-            for rm in forbidden:
-                indices_to_shuffle.pop(rm)
-            a_file.close()
-        else:
-            # we dont want to remap the special characters
-            indices_to_shuffle.pop(50264)
-            indices_to_shuffle.pop(2)
-            indices_to_shuffle.pop(1)
-            indices_to_shuffle.pop(0)
-            self.remap[2] = 2
-            self.remap[50264] = 50264
-            self.remap[1] = 1
-            self.remap[0] = 0
+        self.remove_forbidden_tokens(indices_to_shuffle, self.forbid)
         
         if self.shuffle:
             np.random.seed(0)
             random.shuffle(indices_to_shuffle)
-        
         while indices_to_shuffle != []:
+            tokens = []
             token1 = indices_to_shuffle.pop()
-            if indices_to_shuffle == []: # odd vocab size
-                self.remap[token1] = token1
-                self.reverse_map[token1] = [token1, token1]
-                break
-            token2 = indices_to_shuffle.pop()
             self.remap[token1] = token1
-            self.remap[token2] = token1
-            self.reverse_map[token1] = [token1, token2]
-            self.reverse_map[token2] = [token1, token2]
-        # for test
-        log.info(self.reverse_map)
-        # log.info("Remap[1000 ] =" + str(self.remap[1000]))
-        # log.info("ReverseRemap[1000] =" + str(self.reverse_map[1000]))
-
+            tokens.append(token1)
+            for i in range(self.remap_count - 1):
+                if indices_to_shuffle == []: # odd vocab size
+                    break
+                token = indices_to_shuffle.pop()
+                self.remap[token] = token1
+                tokens.append(token)
+            for t in tokens:
+                self.reverse_map[t] = tokens
+                
+        #log.info(self.reverse_map)
+        #log.info(self.remap)
+        #exit(1)
 
 class RemapFrequency(RemapBase):
     def __init__(self, vocab, freq_path, freq_type, forbid=False, window="all"):
@@ -152,28 +191,7 @@ class RemapFrequency(RemapBase):
 
         self.remap = {int(key): 0 for key in self.vocab}
         self.reverse_map = {int(key): None for key in self.vocab}
-        if self.forbid:
-            # there are some tokens that we do not want to map because they will cause incosisntency
-            a_file = open("roberta_gpt_mapper.pkl", "rb")
-            roberta_gpt_mapper = pickle.load(a_file)
-            for i in range(len(roberta_gpt_mapper)):
-                if roberta_gpt_mapper[i] == -1:
-                    self.forbidden_tokens.append(i)
-                    self.remap[i] = i
-            self.forbidden_tokens.sort(reverse=True)
-            for rm in self.forbidden_tokens:
-                self.freq_ids.pop(rm)
-            a_file.close()
-        else:
-            # we dont want to remap the special characters
-            self.freq_ids.pop(50264)
-            self.freq_ids.pop(2)
-            self.freq_ids.pop(1)
-            self.freq_ids.pop(0)
-            self.remap[2] = 2
-            self.remap[50264] = 50264
-            self.remap[1] = 1
-            self.remap[0] = 0
+        self.remove_forbidden_tokens(self.freq_ids, self.forbid)
         
         sorted_freq_ids = sorted(self.freq_ids, key=lambda x: x[1], reverse=True)
 

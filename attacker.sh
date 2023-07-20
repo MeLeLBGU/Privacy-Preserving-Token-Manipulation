@@ -20,7 +20,7 @@ nvidia-smi -L
 
 #python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --save=$1 --remap_type=$2 --frequency_window=$3 --dataset=$4 #--finetune
 
-python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=$1 --dataset=$2 --attacker --remap=all --frequency_window=half
+#python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=$1 --dataset=$2 --attacker --remap=all --frequency_window=half
 #high
 #python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=freq-high --dataset=imdb --attacker --remap=all --frequency_window=half
 
@@ -28,6 +28,6 @@ python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_robert
 # python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=freq-low --dataset=imdb --attacker --remap=all --frequency_window=half
 
 #random
-# python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=random --dataset=imdb --attacker --remap=all
+python main.py --remap_count=3 --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=random --dataset=sst2 --attacker --remap=all
 
 
