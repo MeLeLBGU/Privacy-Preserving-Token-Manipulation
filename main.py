@@ -16,7 +16,7 @@ import logging as log
 import pickle
 import copy
 from remap_base import *
-MAX_LEN = 66
+# MAX_LEN = 512
 
 
 
@@ -47,7 +47,6 @@ def initialize_model(model, epochs, dataloader):
 
     return bert_classifier, optimizer, scheduler, loss_fn
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--predict', default = False, action = "store_true",
@@ -61,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument('--remap', default = "all", type = str,
                         dest = 'remap', help = 'Remap the validation/text set or all the sets. (default: all)', choices=["validation", "all"])
     parser.add_argument('--remap_type', default = "random", type = str,
-                        dest = 'remap_type', help = 'what type of remap. freq-high is mapping low to high (default: random)', choices=["random", "freq-high","freq-low", "none"])
+                        dest = 'remap_type', help = 'what type of remap. freq-high is mapping low to high (default: random)', choices=["random", "freq-high","freq-low", "conv", "none"])
     parser.add_argument('--cpu', default = False, action = "store_true",
                         dest = 'cpu', help = 'Use cpu instead of a device')
     parser.add_argument('--attacker', default = False, action = "store_true",
@@ -82,13 +81,17 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     # model = AutoModel.from_pretrained(args.model)
     #  data = load_dataset(args.dataset)
+    if args.dataset == "sst2":
+        MAX_LEN = 66
+    else:
+        MAX_LEN = 512
     fname = args.save.split(".pt")[0] + ".log"
     f = open(fname, "w")
     f.close()
     print(fname)
     log.basicConfig(filename=fname, level=log.INFO)
     # prep input
-    batch_size = 32
+    batch_size = 8
     if not args.cpu:
         device = torch.device("cuda:0")
     else:
@@ -103,7 +106,7 @@ if __name__ == "__main__":
     elif "freq" in args.remap_type:
         remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, forbid=args.attacker, window=args.frequency_window)
     elif "conv" in args.remap_type:
-        remapper = RemapConv(args.model)
+        remapper = RemapConv(args.model, args.dataset)
     attacker_file = attacker_file + "_" + str(args.remap_count) + args.remap_type
     attacker_file = attacker_file + "_" + args.dataset
     attacker_file = attacker_file + ".json"
@@ -130,9 +133,9 @@ if __name__ == "__main__":
         # Now remap the tokens to the new tokens
         if not args.finetune:
             if args.remap == "validation" or args.remap == "all":
-                val_input_ids = remapper.remap_input_ids(val_input_ids, val_attention_mask)
+                val_input_ids = remapper.remap_input_ids(val_input_ids, val_attention_mask, "val")
             if args.remap == "all":
-                train_input_ids = remapper.remap_input_ids(train_input_ids, train_attention_mask)
+                train_input_ids = remapper.remap_input_ids(train_input_ids, train_attention_mask, "all")
 
         if args.attacker:
             print("Attack mode!")

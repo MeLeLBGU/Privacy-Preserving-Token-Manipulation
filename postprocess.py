@@ -38,7 +38,7 @@ def get_statistics(d):
         statistics["real_probability"][k] = d[key]["real_sentence_probability"]
         
         statistics["abs_edit_distance"][k] = len(d[key]["tokens"]) - d[key]["token_hit"][0] #/ float())) # normalize
-        statistics["rel_edit_distance"][k] = d[key]["token_hit"][0] / len(d[key]["tokens"])
+        statistics["rel_edit_distance"][k] = (len(d[key]["tokens"]) - d[key]["token_hit"][0]) / len(d[key]["tokens"]) #d[key]["token_hit"][0] / len(d[key]["tokens"])
         for j, rps in enumerate(d[key]["removed_per_step"]):
             statistics["removed_per_step"][j] = statistics["removed_per_step"][j] + rps
     print("Failed:", failed)
@@ -91,11 +91,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--file',  type = str,
                         dest = 'file', help = 'Save mode path.')
-
+    parser.add_argument('--all', default = False, action="store_true",
+                        dest = 'all', help = 'What base model to use')
+    FILES = ["attacker_random_sst2.json", "attacker_random_imdb.json", "attacker_freq-high_sst2.json",
+             "attacker_freq-high_imdb.json"]
+    
     args = parser.parse_args()
-    with open(args.file, "r") as f:
-        data = json.load(f)
-    statistics, len_data = get_statistics(data)
-    statistics["file"] = args.file
-    plot_statistics(statistics, len_data)
+
+    if args.all:
+        for file in FILES:
+            print("######################", file, "######################")
+            with open(file, "r") as f:
+                data = json.load(f)
+                statistics, len_data = get_statistics(data)
+            plot_statistics(statistics, len_data)
+            print("")
+    else:
+        with open(args.file, "r") as f:
+            data = json.load(f)
+            statistics, len_data = get_statistics(data)
+        statistics["file"] = args.file
+        plot_statistics(statistics, len_data)
     

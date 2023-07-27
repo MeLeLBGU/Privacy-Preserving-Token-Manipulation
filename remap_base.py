@@ -7,8 +7,10 @@ import numpy as np
 import utils
 import logging as log
 from tqdm import tqdm
+import time
 from transformers import AutoModel
 import pickle
+import copy
 import torch
 import sklearn.metrics.pairwise as sklearn
 
@@ -37,7 +39,7 @@ class RemapBase:
         return self.remap
 
     # we assume that the vocab is id: 'word'
-    def remap_input_ids(self, input_ids, attention_mask):
+    def remap_input_ids(self, input_ids, attention_mask, name=""):
         survived_tokens = 0
         total_tokens = 0 
         if self.remap == {}:
@@ -79,42 +81,82 @@ class RemapBase:
             self.remap[0] = 0
 
 class RemapConv(RemapBase):
-    def __init__(self, model):
+    def __init__(self, model, dataset):
         super().__init__()
         model1 = AutoModel.from_pretrained(model)
-        self.word_embeddings = model1.embeddings.word_embeddings.weight # matrix 50265x768, lookup table
-        self.similarity_score = sklearn.cosine_similarity
+        model1.eval() # important!
+        with torch.no_grad():
+            self.word_embeddings = model1.embeddings.word_embeddings.weight.numpy() # matrix 50265x768, lookup table
+            self.similarity_score = sklearn.cosine_similarity
+        self.dataset = dataset
+        # self.fname = "remap_conv_" + self.dataset + ".pkl"
 
     def get_unique(self):
         return "conv"
     
-    def remap_input_ids(self, input_ids, attention_mask):
-        survived_tokens = 0
-        total_tokens = 0 
-        new_input_ids = input_ids
+    def remap_input_ids(self, input_ids, attention_mask, name=""):
+        new_input_ids = copy.deepcopy(input_ids)
+        name = "remap_conv_" + self.dataset + "_" + name + ".pkl"
+        print(name)
+        if os.path.exists(name) and os.stat(name).st_size > 2:
+            # we already mapped this
+            with open(name, "rb") as f:
+                print("Already remapped this:", name)
+                return pickle.load(f)
+    
+        with torch.no_grad():
         # cpy = input_ids
-        for i, tokens in enumerate(input_ids):
-            for j in range(len(tokens)):
-                tokens_to_fuse, weights = self.get_tokens_and_weights(tokens, j)
-                new_embedding_vector = []
-                for token, weight in zip(tokens_to_fuse, weights):
-                    new_embedding_vector = new_embedding_vector + self.word_embeddings[token] * weight
-
-
+            for i, tokens in tqdm(enumerate(input_ids)):
+                print("NEW TOKEN")
+                for j in range(len(tokens)):
+                    if attention_mask[i][j] == 0 or tokens[j] == 0:
+                        continue
+                    tokens_to_fuse, weights = self.get_tokens_and_weights(tokens, j) # if we want a different kind of weights
+                    new_embedding_vector = np.full(self.word_embeddings[0].shape, 0.0)
+                    for token, weight in zip(tokens_to_fuse, weights):
+                        new_embedding_vector = new_embedding_vector + self.word_embeddings[token] * weight
+                    new_token, score = self.get_most_similar_token(new_embedding_vector, tokens[j])
+                    print("old:", tokens[j], "new:", new_token, "score:", score)
+                    new_input_ids[i][j] = torch.tensor(new_token, dtype=torch.long)
+        with open(name, "wb") as f:
+            pickle.dump(new_input_ids, f)
         return new_input_ids
+    
+    # def similarities_vectorized2(v1, v2):
+    #     norms = np.linalg.norm(vector_data, axis=1)
+    #     combs = np.fromiter(combinations(range(vector_data.shape[0]),2), dtype='i,i')
+    #     similarities = (vector_data[combs['f0']]*vector_data[combs['f1']]).sum(axis=1)/norms[combs['f0']]/norms[combs['f1']]
+    #     return combs, similarities
+    
+    def get_most_similar_token(self, new_embedd_vector, skip):
+        max_score = 0
+        nearest_token = -1
+        scores = []
+        new_embedd_vector = np.reshape(new_embedd_vector, (1, len(new_embedd_vector)))
+        scores = self.similarity_score(self.word_embeddings, new_embedd_vector)
+        # for i, emb_vector in enumerate(self.word_embeddings):
+        #     scores.append(self.similarity_score([emb_vector], [new_embedd_vector])[0][0])
+        
+        for i in range(len(scores)):
+            if i == skip:
+                continue
+            if scores[i][0] > max_score:
+                max_score = scores[i][0]
+                nearest_token = i
+        return nearest_token, max_score
     
     def get_tokens_and_weights(self, tokens, j):
         tokens_to_fuse = []
         weights = []
         if j != 0:
-            tokens_to_fuse.append[tokens[j-1]]
-            weights.append(0.25)
+            tokens_to_fuse.append(tokens[j-1])
+            weights.append(0.2)
         tokens_to_fuse.append(tokens[j])
-        weights.append(0.5)
-        if tokens[j+1] != 0:
-            tokens_to_fuse.append[tokens[j+1]]
-            weights.append(0.25)
-        return tokens_to_fuse, weights
+        weights.append(0.6)
+        if j + 1 > len(tokens) or tokens[j+1] != 0 :
+            tokens_to_fuse.append(tokens[j+1])
+            weights.append(0.2)
+        return np.array(tokens_to_fuse), np.array(weights)
 
 class RemapRandom(RemapBase):
     def __init__(self, vocab, shuffle=True, forbidden_tokens=False, remap_count=2):

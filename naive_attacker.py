@@ -58,19 +58,22 @@ class NucleusBeamSearch():
         # before we do the nuclus beam search we need to transform the input ids to text
         # candidates_texts = utils.get_text_from_input_ids(self.tokenizer, candidates_tokens, skip_special=True)
         
-        # we map from RoBERTa to gpt
+        # We are scoring the sentences with GPT2, however, the tokens were generated from
+        # RoBERTa, therefore, remap the RoBERTa tokens to GPT-2 (there exists such mapper
+        # except for some Korean/Chinese/Japanese characters)
+        # 
         gpt_tokens = copy.deepcopy(candidates_tokens)
         for i, tokens in enumerate(candidates_tokens):
             for j, token in enumerate(tokens):
                 gpt_tokens[i][j] = self.roberta_gpt_mapper[token]
         candidates_texts = utils.get_text_from_input_ids(self.gpt_tokenizer, gpt_tokens)#, skip_special=True)
         candidates_texts2 = utils.get_text_from_input_ids(self.tokenizer, candidates_tokens)#, skip_special=True)
+        # Just make sure that the texts are the same
         if candidates_texts != candidates_texts2:
             print("Error in RoBERTa to GPT transition")
             print(candidates_texts, candidates_texts2)
             print(gpt_tokens, candidates_tokens)
             return None, None
-#        print("text:", candidates_texts)
 
         total_probability = 0.0 #1 - np.sum(prefix_probabilities)
         prob_candidates = [] # first item in tuple is the probability, and the second is the candidate index
@@ -78,7 +81,10 @@ class NucleusBeamSearch():
         candidates_logits = []
         logits = []
         # for i, candidate_text in enumerate(candidates_texts):
+        # Go through all the candidates tokens and apply the lm scorer on them
         for i, candidate_token in enumerate(gpt_tokens):
+            # LM-scorer originally applys the tokenization itself, I changed their code so they can
+            # accept the tokens in a string format
             if i % self.permu_count != self.permu_count - 1:
                 candidate = ' '.join(map(str, candidate_token))
                 # we batch it now
@@ -93,8 +99,7 @@ class NucleusBeamSearch():
                 candidates_logits.append(logits)
                 logits = []
 
-       # i-1 +j
-       # i - 2 + j
+        # Calculate the probability of the candidate tokens
         for i, logits_with_same_prefix in enumerate(candidates_logits):
             prefix_probability = prefix_probabilities[i]
             probs = softmax(logits_with_same_prefix)
@@ -105,18 +110,19 @@ class NucleusBeamSearch():
                 probabilities.append(prob * prefix_probability)
         
         
-        # will be helpful to sort the array
+        # will be helpful to sort the array and then remove it
         prob_candidates.sort(key=mysort_criteria)
         indices_to_remove = []
 
-        if self.step > 4: # only after we have atleast 2^6 candidates we will consider to remove them
-            if len(probabilities) > 250: # if we are looking at too much candidates let's remove some of em
+        if self.step > 4: # only after we have atleast 2^4 candidates we will consider to remove them
+            if len(probabilities) > 250: # if we are looking at too much candidates let's remove some of  as it might explode
                 if self.percentage_target > self.max_percentage_target:
                     self.percentage_target = self.percentage_target - self.remove_percentage# lower threshold
+                    # Next iteration we lower the percentage
                 else:
                     print("Bad probability", len(probabilities), self.max_percentage_target,self.percentage_target,self.step)
                     return None, None
-                # print("allowing the removal of more candidates", self.step, self.percentage_target)
+
             for i in range(len(prob_candidates)):
                 candidate_prob, candidate_index = prob_candidates[i]
                 total_probability = total_probability - candidate_prob
@@ -144,6 +150,8 @@ def create_possible_permutation(reverse_vocab, input_ids, permu_count, NBS : Nuc
     print("Total candidates to check:", len(input_ids))
     for i, token in enumerate(input_ids):
         token = int(token)
+        if token == 0:
+            return permutations, prefix_probabilities
         try:
             token_choices = get_token_choices(reverse_vocab, token)
         except:

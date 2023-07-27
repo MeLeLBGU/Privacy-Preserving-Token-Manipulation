@@ -28,6 +28,6 @@ nvidia-smi -L
 # python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=freq-low --dataset=imdb --attacker --remap=all --frequency_window=half
 
 #random
-python main.py --remap_count=3 --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=random --dataset=sst2 --attacker --remap=all
+python main.py --remap_count=3 --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=random --dataset=imdb --attacker --remap=all
 
 
