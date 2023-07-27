@@ -34,7 +34,7 @@ class RemapBigram:
     # we assume that the vocab is id: 'word'
     def remap_input_ids(self, input_ids, attention_mask, name=""):
         """
-        map tokens to new tokens
+        Map tokens to new tokens
         """
         survived_tokens = 0
         total_tokens = 0 
