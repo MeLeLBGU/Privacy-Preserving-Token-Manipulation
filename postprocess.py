@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 def get_statistics(d):
     len_data = len(d)
-    statistics = {"rank":[0] * len_data, "removed_per_step":[0] * 180, "computation_time": 0,
+    statistics = {"rank":[0] * len_data, "removed_per_step":[0] * 513, "computation_time": 0,
                    "candidates_checked": [0] * len_data,
                    "abs_edit_distance" : [0] * len_data,
                    "rel_edit_distance" : [0] * len_data,

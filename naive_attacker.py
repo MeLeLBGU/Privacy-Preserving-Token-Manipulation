@@ -22,9 +22,10 @@ def mysort_criteria(e: Tuple):
     return e[0]
 
 class NucleusBeamSearch():
-    def __init__(self, scorer: LMScorer, percentage_target: float, tokenizer, permu_count):
+    def __init__(self, scorer1: LMScorer,scorer2: LMScorer, percentage_target: float, tokenizer, permu_count):
         self.percentage_target = 0.9975
-        self.scorer = scorer
+        self.scorer1 = scorer1
+        self.scorer2 = scorer2
         self.tokenizer = tokenizer
         self.removed_sentences = 0
         self.remove_percentage = 0.0025
@@ -54,7 +55,6 @@ class NucleusBeamSearch():
         # Another assumption is that the prefix probabilies is such that prefix_probabilities[i] corresponds to the 
         # candidate_text[i] candidate_text[i+1] suffix..
         self.removed_per_step.append(0)
-        
         # before we do the nuclus beam search we need to transform the input ids to text
         # candidates_texts = utils.get_text_from_input_ids(self.tokenizer, candidates_tokens, skip_special=True)
         
@@ -82,20 +82,33 @@ class NucleusBeamSearch():
         logits = []
         # for i, candidate_text in enumerate(candidates_texts):
         # Go through all the candidates tokens and apply the lm scorer on them
+        # if len(gpt_tokens) < 16:
+        #     for i, candidate_token in enumerate(gpt_tokens):
+        #         # LM-scorer originally applys the tokenization itself, I changed their code so they can
+        #         # accept the tokens in a string format
+        #         if i % self.permu_count != self.permu_count - 1:
+        #             candidate = ' '.join(map(str, candidate_token))
+        #             # we batch it now
+        #             prob1, ids1, tokens1, logits1 = self.scorer1.tokens_score(candidate) # should return the logit
+        #             logits.append(logits1[-2])
+        #         else:
+        #             candidate = ' '.join(map(str, candidate_token))
+        #             prob2, ids2, tokens2, logits2 = self.scorer1.tokens_score(candidate) # should return the logit
+        #             # prob, ids, tokens, logits = self.scorer.tokens_score([candidate1, candidate2]) # should return the logit
+        #             logits.append(logits2[-2])# -2 because -1 is the end of sentence token
+        #             # prefix_probability = prefix_probabilities[int((i - self.permu_count + 1)/self.permu_count)]
+        #             candidates_logits.append(logits)
+        #             logits = []
+        # else:
+        candidates_batch = []
         for i, candidate_token in enumerate(gpt_tokens):
-            # LM-scorer originally applys the tokenization itself, I changed their code so they can
-            # accept the tokens in a string format
-            if i % self.permu_count != self.permu_count - 1:
-                candidate = ' '.join(map(str, candidate_token))
-                # we batch it now
-                prob1, ids1, tokens1, logits1 = self.scorer.tokens_score(candidate) # should return the logit
-                logits.append(logits1[-2])
-            else:
-                candidate = ' '.join(map(str, candidate_token))
-                prob2, ids2, tokens2, logits2 = self.scorer.tokens_score(candidate) # should return the logit
-                # prob, ids, tokens, logits = self.scorer.tokens_score([candidate1, candidate2]) # should return the logit
-                logits.append(logits2[-2])# -2 because -1 is the end of sentence token
-                # prefix_probability = prefix_probabilities[int((i - self.permu_count + 1)/self.permu_count)]
+            candidate = ' '.join(map(str, candidate_token))
+            candidates_batch.append(candidate)
+        scores_batch = self.scorer2.tokens_score(candidates_batch)
+        # unpack
+        for i, score_tuple in enumerate(scores_batch):
+            logits.append(score_tuple[3][-2])
+            if i % self.permu_count == self.permu_count - 1:
                 candidates_logits.append(logits)
                 logits = []
 
@@ -114,7 +127,7 @@ class NucleusBeamSearch():
         prob_candidates.sort(key=mysort_criteria)
         indices_to_remove = []
 
-        if self.step > 4: # only after we have atleast 2^4 candidates we will consider to remove them
+        if self.step > 6: # only after we have atleast 2^4 candidates we will consider to remove them
             if len(probabilities) > 250: # if we are looking at too much candidates let's remove some of  as it might explode
                 if self.percentage_target > self.max_percentage_target:
                     self.percentage_target = self.percentage_target - self.remove_percentage# lower threshold
@@ -196,9 +209,10 @@ def get_token_hit(permutations, real_permutation, topk=5):
 
 
 def main(tokenizer, device, mapped_train_input_ids, original_train_input_ids, remapper: RemapBase, permu_count, attacker_file):
-    scorer = LMScorer.from_pretrained("gpt2", device = device, batch_size = 1)
+    scorer1 = LMScorer.from_pretrained("gpt2", device = device, batch_size = 1)
+    scorer2 = LMScorer.from_pretrained("gpt2", device = device, batch_size = 16)
     reversed_mapper = remapper.get_reversed_map()
-    NBS = NucleusBeamSearch(scorer, 0.0, tokenizer, len(reversed_mapper[15]))
+    NBS = NucleusBeamSearch(scorer1, scorer2, 0.0, tokenizer, len(reversed_mapper[15]))
     print(attacker_file)
     if os.path.exists(attacker_file):
         with open(attacker_file, "r") as f:
@@ -260,7 +274,7 @@ def main(tokenizer, device, mapped_train_input_ids, original_train_input_ids, re
                             "computation_time": -1,
                             "tokens": original_train_input_ids[i]
                         }
-        if i % 50 == 49:
+        if i % 20 == 19:
             with open(attacker_file, "r+") as outfile:
                 json.dump(dict1, outfile, indent=4)
         NBS.reset()

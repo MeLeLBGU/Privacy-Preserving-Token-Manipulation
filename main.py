@@ -58,7 +58,7 @@ if __name__ == "__main__":
     parser.add_argument('--save', default = "result.pt", type = str,
                         dest = 'save', help = 'Save mode path. (default: result.pt)')
     parser.add_argument('--remap', default = "all", type = str,
-                        dest = 'remap', help = 'Remap the validation/text set or all the sets. (default: all)', choices=["validation", "all"])
+                        dest = 'remap', help = 'Remap the validation/text set or all the sets. (default: all)', choices=["validation", "all", "train"])
     parser.add_argument('--remap_type', default = "random", type = str,
                         dest = 'remap_type', help = 'what type of remap. freq-high is mapping low to high (default: random)', choices=["random", "freq-high","freq-low", "conv", "none"])
     parser.add_argument('--cpu', default = False, action = "store_true",
@@ -134,8 +134,8 @@ if __name__ == "__main__":
         if not args.finetune:
             if args.remap == "validation" or args.remap == "all":
                 val_input_ids = remapper.remap_input_ids(val_input_ids, val_attention_mask, "val")
-            if args.remap == "all":
-                train_input_ids = remapper.remap_input_ids(train_input_ids, train_attention_mask, "all")
+            if args.remap == "all" or args.remap == "train":
+                train_input_ids = remapper.remap_input_ids(train_input_ids, train_attention_mask, "train")
 
         if args.attacker:
             print("Attack mode!")

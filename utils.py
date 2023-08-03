@@ -147,3 +147,8 @@ def create_vocabulary(tokenizer, vocab_type="token"):
                 word_freqs[str(word)] += 1
         return word_freqs
 
+
+def gaussian_weights(size, sigma=1):
+    x = np.linspace(-(size // 2), size // 2, size)
+    gaussian = np.exp(-x**2 / (2 * sigma**2))
+    return gaussian / np.sum(gaussian)  # Normalize the weights to sum up to 1
