@@ -15,10 +15,9 @@ import naive_attacker as naive_attacker
 import logging as log
 import pickle
 import copy
+import nn_attacker as nn_attacker
 from remap_base import *
 # MAX_LEN = 512
-
-
 
 
 def initialize_model(model, epochs, dataloader):
@@ -63,8 +62,8 @@ if __name__ == "__main__":
                         dest = 'remap_type', help = 'what type of remap. freq-high is mapping low to high (default: random)', choices=["random", "freq-high","freq-low", "conv", "none"])
     parser.add_argument('--cpu', default = False, action = "store_true",
                         dest = 'cpu', help = 'Use cpu instead of a device')
-    parser.add_argument('--attacker', default = False, action = "store_true",
-                        dest = 'attacker', help = 'Initiate attacker. (default: False)')
+    parser.add_argument('--attacker', default = "", type = str,
+                        dest = 'attacker', help = 'Initiate attacker. (default: naive)', choices=["naive", "knn"])
     parser.add_argument('--dataset', default = "sst2", type = str,
                         dest = 'dataset', help = 'What database to use. (default: sst2)', choices=["sst2", "imdb"])
     parser.add_argument('--frequency_path', default = "wiki_freq.pkl", type = str,
@@ -73,11 +72,21 @@ if __name__ == "__main__":
                         dest = 'frequency_window', help = 'What window. (default: "all")')
     parser.add_argument('--model', default = "roberta-base", type = str,
                         dest = 'model', help = 'What base model to use')
+    parser.add_argument('--segment', default = "", type = str,
+                        dest = 'segment', help = 'What segment of data')
     parser.add_argument('--finetune', default = False, action="store_true",
                         dest = 'finetune', help = 'What base model to use')
+    parser.add_argument('--stencil_size', default = 3, type = int,
+                        dest = 'stencil_size', help = 'How many values to consider in the stencil')
+    parser.add_argument('--stencil_stride', default = 1, type = int,
+                        dest = 'stencil_stride', help = 'How many values to consider in the stencil')
 
     args = parser.parse_args()
-    attacker_file = "attacker"
+    if args.attacker == "naive":
+        attacker_file = "attacker"
+    else:
+        attacker_file = "attacker" + "_" + args.attacker
+    is_naive_attacker = True if args.attacker == "naive" else False
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     # model = AutoModel.from_pretrained(args.model)
     #  data = load_dataset(args.dataset)
@@ -102,14 +111,13 @@ if __name__ == "__main__":
         vocab = create_vocabulary(tokenizer=tokenizer)  # bert vocab
 
     if args.remap_type == "random":
-        remapper = RemapRandom(vocab, forbidden_tokens=args.attacker, remap_count=args.remap_count)
+        remapper = RemapRandom(vocab, forbidden_tokens=is_naive_attacker, remap_count=args.remap_count)
     elif "freq" in args.remap_type:
-        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, forbid=args.attacker, window=args.frequency_window)
+        remapper = RemapFrequency(vocab, args.frequency_path, args.remap_type, forbid=is_naive_attacker, window=args.frequency_window)
     elif "conv" in args.remap_type:
-        remapper = RemapConv(args.model, args.dataset)
+        remapper = RemapConv(args.model, args.dataset, args.stencil_size, args.stencil_stride)
     attacker_file = attacker_file + "_" + str(args.remap_count) + args.remap_type
     attacker_file = attacker_file + "_" + args.dataset
-    attacker_file = attacker_file + ".json"
     
     # training mode
     if not args.predict:
@@ -126,9 +134,9 @@ if __name__ == "__main__":
         # preprocess the text to create the input ids
         # note that if we are in attacking mode, we want to truncate all the special tokens, and the padding, so we sent as an argument "not args.attacker" which tells the
         # encode_text to remove these tokens
-        train_input_ids, train_attention_mask = encode_text(tokenizer, train_text, MAX_LEN, not args.attacker)
-        val_input_ids, val_attention_mask = encode_text(tokenizer, val_text, MAX_LEN, not args.attacker)
-        if args.attacker:
+        train_input_ids, train_attention_mask = encode_text(tokenizer, train_text, MAX_LEN, not is_naive_attacker)
+        val_input_ids, val_attention_mask = encode_text(tokenizer, val_text, MAX_LEN, not is_naive_attacker)
+        if args.attacker != "":
             original_train_input_ids = copy.deepcopy(train_input_ids) # save the original tokens!
         # Now remap the tokens to the new tokens
         if not args.finetune:
@@ -137,9 +145,24 @@ if __name__ == "__main__":
             if args.remap == "all" or args.remap == "train":
                 train_input_ids = remapper.remap_input_ids(train_input_ids, train_attention_mask, "train")
 
-        if args.attacker:
+        if args.attacker != "":
             print("Attack mode!")
-            naive_attacker.main(tokenizer, device, train_input_ids, original_train_input_ids, remapper, args.remap_count, attacker_file)
+            if args.segment != "":
+                segment = int(args.segment)
+                attacker_file = attacker_file + "_segment" + args.segment
+                seg_len = int(len(train_input_ids) * (segment / 100))
+                len10 = int(len(train_input_ids) * (10 / 100))
+                train_input_ids = train_input_ids[seg_len: seg_len + len10 + 1]
+                original_train_input_ids = original_train_input_ids[seg_len: seg_len + len10 + 1]
+            attacker_file = attacker_file + ".json"
+            
+            if args.attacker == "naive":
+                naive_attacker.main(tokenizer, device, train_input_ids, original_train_input_ids, remapper, args.remap_count, attacker_file)
+            elif args.attacker == "knn":
+                attacker_file = remapper.get_file_name().split('.pkl')[0]
+                attacker_file = "attacker_" + attacker_file + ".json"
+                nn_attacker.main(args.model, tokenizer, train_input_ids, original_train_input_ids, attacker_file)
+
             exit(0)
         # Create the DataLoader for our training set
         train_data, train_sampler, train_dataloader = create_dataloader(train_input_ids, train_attention_mask,

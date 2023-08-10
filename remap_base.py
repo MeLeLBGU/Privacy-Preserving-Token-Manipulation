@@ -27,7 +27,8 @@ class RemapBase:
     
     def get_unique(self):
         return ""
-    
+    def get_file_name(self):
+        return ""
     def get_reversed_map(self):
         if self.reverse_map == {}:
             self.create_remap()
@@ -58,6 +59,19 @@ class RemapBase:
         print("survived tokens:", survived_tokens, survived_tokens/ total_tokens)
         return new_input_ids
     
+    
+    def count_changed_tokens(self, old_input_ids, new_input_ids):
+        survived_tokens = 0
+        total_tokens = 0 
+        for i, ids in enumerate(old_input_ids):
+            for j, token in enumerate(ids):
+                if int(token) == 0 or token == 1 or token == 2:
+                    continue
+                if int(old_input_ids[i][j]) == int(new_input_ids[i][j]):
+                    survived_tokens = survived_tokens + 1
+                total_tokens = total_tokens + 1
+        print("survived tokens:", survived_tokens, survived_tokens/ total_tokens)
+
     def remove_forbidden_tokens(self, indices_to_shuffle, forbid):
         if forbid:
             a_file = open("roberta_gpt_mapper.pkl", "rb")
@@ -82,7 +96,7 @@ class RemapBase:
             self.remap[0] = 0
 
 class RemapConv(RemapBase):
-    def __init__(self, model, dataset):
+    def __init__(self, model, dataset, stencil_size=3, stride=1):
         super().__init__()
         model1 = AutoModel.from_pretrained(model)
         model1.eval() # important!
@@ -90,33 +104,40 @@ class RemapConv(RemapBase):
             self.word_embeddings = model1.embeddings.word_embeddings.weight.numpy() # matrix 50265x768, lookup table
             self.similarity_score = sklearn.cosine_similarity
         self.dataset = dataset
-        self.weights = utils.gaussian_weights(3, sigma=0.6)
+        if stencil_size % 2 == 0:
+            print("cannot stencil with even number")
+            exit(1)
+        self.weights = utils.gaussian_weights(stencil_size, sigma=0.6)
+        self.indices = [0] * stencil_size
+        start = int((stencil_size - 1) / 2)
+        for i in range(stencil_size):
+            self.indices[i] = i - start
         self.fname = ""
-
-    def get_unique(self):
-        return "conv"
+        self.stride = stride
+        self.stencil_size = stencil_size
     
     def get_tokens_and_weights(self, tokens, j):
         tokens_to_fuse = []
-        weights = self.weights
-        if j != 0:
-            tokens_to_fuse.append(tokens[j-1])
-        else:
-            weights = [weights[1] + weights[0]/2, weights[2]+ weights[0]/2]
-        
-        tokens_to_fuse.append(tokens[j])
-
-        if j + 1 >= len(tokens) or tokens[j+1] != 0:
-            tokens_to_fuse.append(tokens[j+1])
-        else:
-            weights = [weights[0]+ weights[2]/2, weights[1] + weights[2]/2]
-        
+        weights = []
+        weight_skipped = []
+        for i, ind in enumerate(self.indices):
+            if j + ind >= len(tokens) or j + ind < 0 or tokens[j+ind] == 0 or tokens[j+ind] == 1 or tokens[j+ind] == 2:
+                weight_skipped.append(self.weights[i])
+            else:
+                tokens_to_fuse.append(tokens[j + ind])
+                weights.append(self.weights[i])
+        additional_weight = np.sum(weight_skipped) / (self.stencil_size - len(weight_skipped))
+        weights = weights + additional_weight
+        if np.sum(weights) < 0.999999 or np.sum(weights) > 1.000001:
+            print("Error with weights")
+            exit(1)
         return np.array(tokens_to_fuse), np.array(weights)
     
-
-   # @jit(nopython=True)
     def remap_input_ids(self, input_ids, attention_mask, name=""):
-        self.fname = "remap_conv_" + self.dataset + "_" + name + ".pkl"
+        if self.stride != 1:
+            self.fname = f"remap_conv_{str(self.stencil_size)}_stride{str(self.stride)}_{self.dataset}_{name}.pkl"
+        else:
+            self.fname = f"remap_conv_{str(self.stencil_size)}_{self.dataset}_{name}.pkl"
         print(self.fname)
         
         new_input_ids = self.restart()
@@ -126,25 +147,34 @@ class RemapConv(RemapBase):
         with torch.no_grad():
         # cpy = input_ids
             for i, tokens in tqdm(enumerate(input_ids)):
+                changed = -1
                 if all(new_input_ids[i].eq(input_ids[i])): # we haven't change it 
                     print("Restarting in:", i , "out of:", len(input_ids))
                     for j in range(len(tokens)):
                         if attention_mask[i][j] == 0 or tokens[j] == 0 or tokens[j] == 1 or tokens[j] == 2:
                             continue
+                        changed = changed + 1
+                        if changed % self.stride != 0:
+                            continue
                         tokens_to_fuse, weights = self.get_tokens_and_weights(tokens, j) # if we want a different kind of weights
                         new_embedding_vector = np.full(self.word_embeddings[0].shape, 0.0)
                         for token, weight in zip(tokens_to_fuse, weights):
                             new_embedding_vector = new_embedding_vector + self.word_embeddings[token] * weight
-                        new_token = get_most_similar_token(self.word_embeddings, new_embedding_vector, skip=int(tokens[j]))
+                        new_token = utils.get_most_similar_token(self.word_embeddings, new_embedding_vector, skip=int(tokens[j]))
                         #print("Step:", i, "New token:", new_token, "Old token:", tokens[j])
                         new_input_ids[i][j] = torch.tensor(new_token, dtype=torch.long)
                     if i % 500 == 1:
                         self.checkpoint(new_input_ids)
         
+        self.count_changed_tokens(input_ids, new_input_ids)
+
         with open(self.fname, "wb") as f:
             pickle.dump(new_input_ids, f)
         return new_input_ids
-   
+    
+    def get_file_name(self):
+        return self.fname
+    
     def checkpoint(self, input_ids):
         with open(self.fname, "wb") as f:
             pickle.dump(input_ids, f)
@@ -155,53 +185,6 @@ class RemapConv(RemapBase):
             with open(self.fname, "rb") as f:
                 print("Already remapped this:", self.fname)
                 return pickle.load(f)
-        
-    
-
-
-@jit(nopython=True)
-def get_most_similar_token(word_embeddings, new_embedd_vector, skip):
-    max_score = 0
-    nearest_token = -1
-    # new_embedd_vector = np.reshape(new_embedd_vector, (1, len(new_embedd_vector)))
-    scores = fast_cosine_matrix(new_embedd_vector, word_embeddings)
-    #for i, emb_vector in enumerate(word_embeddings):
-    #    scores.append(fast_cosine_matrix(emb_vector, new_embedd_vector))
-    
-    for i in range(len(scores)):
-        if i == skip:
-            continue
-        if scores[i] > max_score:
-            max_score = scores[i]
-            nearest_token = i
-    return nearest_token
-
-@jit(nopython=True, parallel=True)
-def fast_cosine_matrix(u, M):
-    scores = np.zeros(M.shape[0])
-    for i in prange(M.shape[0]):
-        v = M[i]
-        m = u.shape[0]
-        udotv = 0
-        u_norm = 0
-        v_norm = 0
-        for j in range(m):
-            # if (np.isnan(u[j])) or (np.isnan(v[j])):
-            #     continue
-
-            udotv += u[j] * v[j]
-            u_norm += u[j] * u[j]
-            v_norm += v[j] * v[j]
-
-        u_norm = np.sqrt(u_norm)
-        v_norm = np.sqrt(v_norm)
-
-        if (u_norm == 0) or (v_norm == 0):
-            ratio = 1.0
-        else:
-            ratio = udotv / (u_norm * v_norm)
-        scores[i] = ratio
-    return scores
 
 
 class RemapRandom(RemapBase):

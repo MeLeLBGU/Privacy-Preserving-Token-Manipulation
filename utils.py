@@ -4,7 +4,53 @@ from tqdm import *
 import numpy as np
 import logging as log
 from datasets import load_dataset
-            
+from numba import jit, prange, njit
+
+
+@jit(nopython=True)
+def get_most_similar_token(word_embeddings, new_embedd_vector, skip):
+    max_score = 0
+    nearest_token = -1
+    # new_embedd_vector = np.reshape(new_embedd_vector, (1, len(new_embedd_vector)))
+    scores = fast_cosine_matrix(new_embedd_vector, word_embeddings)
+    #for i, emb_vector in enumerate(word_embeddings):
+    #    scores.append(fast_cosine_matrix(emb_vector, new_embedd_vector))
+    
+    for i in range(len(scores)):
+        if i == skip:
+            continue
+        if scores[i] > max_score:
+            max_score = scores[i]
+            nearest_token = i
+    return nearest_token
+
+@jit(nopython=True, parallel=True)
+def fast_cosine_matrix(u, M):
+    scores = np.zeros(M.shape[0])
+    for i in prange(M.shape[0]):
+        v = M[i]
+        m = u.shape[0]
+        udotv = 0
+        u_norm = 0
+        v_norm = 0
+        for j in range(m):
+            # if (np.isnan(u[j])) or (np.isnan(v[j])):
+            #     continue
+
+            udotv += u[j] * v[j]
+            u_norm += u[j] * u[j]
+            v_norm += v[j] * v[j]
+
+        u_norm = np.sqrt(u_norm)
+        v_norm = np.sqrt(v_norm)
+
+        if (u_norm == 0) or (v_norm == 0):
+            ratio = 1.0
+        else:
+            ratio = udotv / (u_norm * v_norm)
+        scores[i] = ratio
+    return scores
+
 
 def get_text_from_input_ids(tokenizer, input_ids, skip_special=False):
     """
@@ -152,3 +198,21 @@ def gaussian_weights(size, sigma=1):
     x = np.linspace(-(size // 2), size // 2, size)
     gaussian = np.exp(-x**2 / (2 * sigma**2))
     return gaussian / np.sum(gaussian)  # Normalize the weights to sum up to 1
+
+
+@njit(fastmath=True,parallel=True)
+def eucl_naive(A,B):
+    assert A.shape[1]==B.shape[1]
+    C=np.empty((A.shape[0],B.shape[0]),A.dtype)
+    
+    #workaround to get the right datatype for acc
+    init_val_arr=np.zeros(1,A.dtype)
+    init_val=init_val_arr[0]
+    
+    for i in prange(A.shape[0]):
+        for j in range(B.shape[0]):
+            acc=init_val
+            for k in range(A.shape[1]):
+                acc+=(A[i,k]-B[j,k])**2
+            C[i,j]=np.sqrt(acc)
+    return C

@@ -18,7 +18,13 @@ nvidia-smi -L
 #DATASET=sst2 
 #FW=half
 
-python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=$1 --frequency_window=half --dataset=$2 --attacker #--finetune
+# For imdb freq-high/random
+# python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=$1 --frequency_window=half --dataset=$2 --attacker #--finetune
+
+#for nn attacker
+python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=conv --dataset=sst2 --attacker=knn
+# For imdb segments
+#python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --segment=$3 --remap_type=$1 --frequency_window=half --dataset=$2 --attacker=naive #--finetune
 
 #python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=$1 --dataset=$2 --attacker --remap=all --frequency_window=half
 #high

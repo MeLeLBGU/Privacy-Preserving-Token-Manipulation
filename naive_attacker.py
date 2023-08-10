@@ -128,7 +128,7 @@ class NucleusBeamSearch():
         indices_to_remove = []
 
         if self.step > 6: # only after we have atleast 2^4 candidates we will consider to remove them
-            if len(probabilities) > 250: # if we are looking at too much candidates let's remove some of  as it might explode
+            if len(probabilities) > 150: # if we are looking at too much candidates let's remove some of  as it might explode
                 if self.percentage_target > self.max_percentage_target:
                     self.percentage_target = self.percentage_target - self.remove_percentage# lower threshold
                     # Next iteration we lower the percentage

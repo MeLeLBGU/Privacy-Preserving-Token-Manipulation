@@ -1,12 +1,35 @@
 import argparse
 import sys
-
+import os
 import json
 import numpy as np
 import time
 from utils import *
 import pickle
 import matplotlib.pyplot as plt
+
+
+def merge_json_files(file_path):
+    merged_contents = {}
+    file_paths = [file_path]
+    prefix = file_path.split('.json')[0]
+    if 'imdb' in file_path :
+        multiplier = 2500
+    else:
+        multiplier = 1200
+    for i in range(1, 10):
+        fname = prefix + f"_segment{i}0.json"
+        if os.path.exists(fname):
+            file_paths.append(fname)
+            with open(fname, 'r', encoding='utf-8') as file_in:
+                data = json.load(file_in)
+                keys = list(data.keys())
+                for old_key in keys:
+                    data[str(int(old_key) + i * multiplier)] = data[old_key]
+                    del data[old_key]
+            merged_contents = {**data, **merged_contents}
+
+    return merged_contents
 
 def get_statistics(d):
     len_data = len(d)
@@ -44,6 +67,29 @@ def get_statistics(d):
     print("Failed:", failed)
     return statistics, len_data
 
+def get_statistics_knn(d):
+    len_data = len(d)
+    statistics = {"rank":[0] * len_data, "removed_per_step":[0] * 513, "computation_time": 0,
+                   "candidates_checked": [0] * len_data,
+                   "abs_edit_distance" : [0] * len_data,
+                   "rel_edit_distance" : [0] * len_data,
+                   "real_probability": [0] * len_data,
+                   "mrr":[0] * len_data,
+                   "P1":[0] * len_data,
+                   "P5":[0] * len_data
+                   }
+    failed = 0
+    # i saved it badly so need to convert it to string
+    for k, key in enumerate(d):
+        statistics["P1"][k] = d[key]["rel_token_hit1"]
+        statistics["P5"][k] = d[key]["rel_token_hit5"]
+        statistics["computation_time"] = statistics["computation_time"] + d[key]["computation_time"]
+        
+        # statistics["abs_edit_distance"][k] = len(d[key]["tokens"]) - d[key]["token_hit"][0] #/ float())) # normalize
+        statistics["rel_edit_distance"][k] = d[key]["rel_token_hit1"]
+    print("Failed:", failed)
+    return statistics, len_data
+
 
 def plot_statistics(statistics, len_data):
     print("Total computation time (min):", statistics["computation_time"] / 60, "for:", len_data, "sentences.")
@@ -56,36 +102,6 @@ def plot_statistics(statistics, len_data):
     print("Average relative edit distance :", np.average(statistics["rel_edit_distance"]))
     print("Average candidates checked:", np.average(statistics["candidates_checked"]))
     print("Average probability of real sentence:", np.average(statistics["real_probability"]))
-    
-    # print("Average % to99ken @1 hit:", np.average(statistics["token_hit"][:][0]))
-    # print()
-    # plt.hist(statistics["rank"], bins=[1, 6, 11, 201], edgecolor='black', linewidth=1.2)
-    # plt.xlabel('# rank')
-    # plt.ylabel('Occurences')
-    # plt.title("Histogram of the rank of the real sentence")
-    # plt.show()
-    # plt.savefig(statistics["file"].split(".json")[0] + 'plot_rank.png')
-    # plt.close()
-
-    # ######## candidates ###########
-    # plt.hist(statistics["candidates_checked"], bins=[1, 6, 51, 101], edgecolor='black', linewidth=1.2)
-    # plt.xlabel('# rank')
-    # plt.ylabel('Occurences')
-    # plt.title("Histogram of the total candidates checked")
-    # plt.show()
-    # plt.savefig(statistics["file"].split(".json")[0] + 'plot_candidates.png')
-    # plt.close()
-
-    # ######## token hit ###########
-    # plt.hist(statistics["token_hit"][0][:] ,edgecolor='black', linewidth=1.2)
-    # plt.xlabel('# rank')
-    # plt.ylabel('Occurences')
-    # plt.title("Histogram of the token miss top@1")
-    # plt.show()
-    # plt.savefig(statistics["file"].split(".json")[0] + 'plot_tokenhit.png')
-
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -93,6 +109,8 @@ if __name__ == "__main__":
                         dest = 'file', help = 'Save mode path.')
     parser.add_argument('--all', default = False, action="store_true",
                         dest = 'all', help = 'What base model to use')
+    parser.add_argument('--segment', default = False, action="store_true",
+                        dest = 'segment', help = 'Wether the json files are split to segments')
     FILES = ["attacker_random_sst2.json", "attacker_random_imdb.json", "attacker_freq-high_sst2.json",
              "attacker_freq-high_imdb.json"]
     
@@ -107,8 +125,15 @@ if __name__ == "__main__":
             plot_statistics(statistics, len_data)
             print("")
     else:
-        with open(args.file, "r") as f:
-            data = json.load(f)
+        if args.segment:
+            data = merge_json_files(args.file)
+        else:
+            fname = args.file
+            with open(fname, "r") as f:
+                data = json.load(f)
+        if "knn" in args.file:
+            statistics, len_data = get_statistics_knn(data)
+        else:
             statistics, len_data = get_statistics(data)
         statistics["file"] = args.file
         plot_statistics(statistics, len_data)
