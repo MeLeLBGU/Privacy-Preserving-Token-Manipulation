@@ -14,7 +14,7 @@ nvidia-smi -L
 # for run all
 #python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap=$1 --save=$2 --remap_type=$3 --frequency_window=half --dataset=$4 --remap_count=$5 #--finetune
 
-python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap=all --save=stencil_sst2_all.pt --remap_type=conv --frequency_window=half --dataset=sst2  #--finetune
+# python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap=all --save=stencil_sst2_all.pt --remap_type=conv --frequency_window=half --dataset=sst2  #--finetune
 # python main.py --remap_type=random --remap=all --model=roberta-base --dataset=imdb --save="imdb_512_random_all.pt"
 #python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --save=$1 --remap_type=$2 --frequency_window=$3 --dataset=$4 #--finetune
 #python create_frequencies.py --save=wiki_freq_roberta2.pkl --model=roberta-base

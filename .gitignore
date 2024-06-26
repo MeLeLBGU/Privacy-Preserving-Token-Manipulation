@@ -5,12 +5,13 @@ __pycache__/
 slurm*
 *.pt
 *.png
+*.txt
 data/
 output/
 # C extensions
 *.so
 *.so.1
-
+*pkl*
 # Distribution / packaging
 .Python
 build/

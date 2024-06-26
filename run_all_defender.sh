@@ -1,17 +1,23 @@
 #!/bin/bash
 
 declare -a REMAP_TYPES=("conv")
-declare -a DATASETS=("imdb" "sst2")
-declare -a STENCIL=("3" "7" "11")
+declare -a REMAPS=("all" "validation")
+declare -a DATASETS=("sst2")
+declare -a STENCIL=("3" "5" "7" "9" "11")
 #declare -a DATASETS=("imdb")
+#python main.py --remap=$1 --save=$2 --remap_type=$3 --dataset=$4 
 
-for k in "${STENCIL[@]}"
+for m in "${REMAPS[@]}"
 do
-    for i in "${REMAP_TYPES[@]}"
+    for k in "${STENCIL[@]}"
     do
-        for j in "${DATASETS[@]}"
+        for i in "${REMAP_TYPES[@]}"
         do
-            sbatch defender.sh $i $j $k
+            for j in "${DATASETS[@]}"
+            do
+                save=$i$j$k$m
+                sbatch defender.sh $m $save $i $j $k
+            done
         done
     done
 done

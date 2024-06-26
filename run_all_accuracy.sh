@@ -6,6 +6,7 @@ declare -a DATASETS=("imdb")
 declare -a REMAPS=("all" "validation")
 #declare -a DATASETS=("imdb")
 #--remap=$1 --save=$2 --remap_type=$3 --frequency_window=half --dataset=$4 --remap_count=$5 #--finetune
+#python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap=$1 --save=$2 --remap_type=$3 --frequency_window=half --dataset=$4 --remap_count=$5 #--finetune
 for i in "${REMAP_TYPES[@]}"
 do
     for j in "${DATASETS[@]}"

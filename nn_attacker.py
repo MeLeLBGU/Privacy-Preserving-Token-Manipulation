@@ -26,7 +26,7 @@ import copy
 import json
 
 def checkpoint(attacker_file, i, dict1):
-    if i % 100 == 0:
+    if i % 10 == 0:
         with open(attacker_file, "r+") as outfile:
             json.dump(dict1, outfile, indent=4)
 
@@ -77,31 +77,112 @@ def restart(attacker_file):
 #                 metric_counter.update('ent_hit', temp_hit, temp_total)
 #     attack_results = {metric: metric_counter(metric) for metric in metric_list}
 #     return attack_results
+def remove_non_zero_values(input_list):
+    return [value for value in input_list if value != 0]
 
+def stencil_attacker(real_tokens, tokens, am, emb_table, remapper):
+    
+    word_embeddings = remapper.word_embeddings
+    # embeddings = np.zeros(len(tokens))
+    # for i, token in enumerate(tokens):
+    #     embeddings[i] = word_embeddings[token]
+    # ones = (am == 1).sum()
+    tokens1 = tokens * am
+    tokens1 = remove_non_zero_values(tokens1)
+    ones = len(tokens1) - 2
+    #if ones > 15:
 
-def knn_attack(real_tokens, tokens, emb_table):
+    #    print(ones)
+    #    return [1], [1], [1]
+    stencil_size = remapper.stencil_size
+    A = np.zeros([ones, ones])
+    b = np.zeros([ones, emb_table.shape[1]]) #? maybe..?        
+    #print(tokens1)
+    for i in range(ones):
+        b[i] = emb_table[tokens1[i]]
+        tokens_to_fuse, weights, indices = remapper.get_tokens_and_weights(tokens1, i)
+        for j, ind in enumerate(indices): 
+                A[i][ind] = weights[j]
+    #print(A)
+    x = np.linalg.solve(A, b)
+    #print(x.shape)
+    is_top5 = []
+    is_top1 = []
+    top5_tokens = []
+    top1_tokens = []
+    # top5_unorder = [False]*len(is_top1)
+    j = 0
+    for i, token in enumerate(tokens):
+        if i + 1 == 512:
+           continue
+        if am[i] == 0 or i == 0 or am[i+1] == 0:
+            continue
+        similarity = get_similarity2(x[j], emb_table) # eucl space
+        j = j + 1
+        top5 = sorted(range(len(similarity)), key=lambda sub: similarity[sub])[1:6]
+        top5_tokens.append(top5)
+        is_top1.append(int(real_tokens[i]) == int(top5[0]))
+        is_top5.append(real_tokens[i] in top5)
+    top5_unorder = [False] * len(is_top1)
+    for i, token in enumerate(real_tokens):
+        if i + 1 == 512:
+            continue
+        if am[i] == 0 or i == 0 or am[i+1] == 0:
+            continue
+        for j, top5 in enumerate(top5_tokens):
+            if token in top5:
+                top5_unorder[j] = True
+
+    return is_top1, is_top5, top5_unorder    
+
+def knn_attack(real_tokens, tokens, am, emb_table):
     # todo
     is_top5 = []
     is_top1 = []
+    top5_tokens = []
+    top1_tokens = []
+    # top5_unorder = [False]*len(is_top1)
     for i, token in enumerate(tokens):
-        if token == 0 or token == 1 or token == 2:
+        if i + 1 == 512:
+           continue
+        if am[i] == 0 or i == 0 or am[i+1] == 0:
             continue
-        similarity = get_similarity(token, emb_table)
+        similarity = get_similarity(token, emb_table) # eucl space
         top5 = sorted(range(len(similarity)), key=lambda sub: similarity[sub])[1:6]
+        top5_tokens.append(top5)
         is_top1.append(int(real_tokens[i]) == int(top5[0]))
         is_top5.append(real_tokens[i] in top5)
-    
+    top5_unorder = [False] * len(is_top1)
+    for i, token in enumerate(real_tokens):
+        if i + 1 == 512:
+            continue
+        if am[i] == 0 or i == 0 or am[i+1] == 0:
+            continue
+        for j, top5 in enumerate(top5_tokens):
+            if token in top5:
+                top5_unorder[j] = True
 
-    return is_top1, is_top5    
+    return is_top1, is_top5, top5_unorder    
         
 
 def get_similarity(token, emb_table):
     emb_token = np.zeros((1, emb_table.shape[1]))
     emb_token[0,:] = emb_table[token]
-    return utils.eucl_naive(emb_token, emb_table)[0]  
+    #print(emb_token)
+    a = utils.eucl_naive(emb_token, emb_table)[0]
+    #a = utils.fast_cosine_matrix(emb_token[0], emb_table)#[0]
+    #print(a,b)
+    return a #utils.eucl_naive(emb_token, emb_table)[0]  
+
+def get_similarity2(emb_token, emb_table):
+    #print(emb_token)
+    #a = utils.eucl_naive(emb_token, emb_table)[0]
+    a = utils.fast_cosine_matrix(emb_token, emb_table)#[0]
+    #print(a,b)
+    return a #utils.eucl_naive(emb_token, emb_table)[0]  
 
 
-def create_embedding_similarity_table(emb_table, cosine=False):
+def create_embedding_similarity_table(emb_table, cosine=True):
     similarity_table = np.zeros([len(emb_table), len(emb_table)])
     tokens = [i for i in range(len(emb_table))]
     if not cosine:
@@ -115,23 +196,29 @@ def create_embedding_similarity_table(emb_table, cosine=False):
     return similarity_table
     
 
-def main(model, tokenizer, mapped_train_input_ids, original_train_input_ids, attacker_file):
+def main(model, tokenizer, am, mapped_train_input_ids, original_train_input_ids, attacker_file, remapper):
     dict1, last_index = restart(attacker_file)
     model1 = AutoModel.from_pretrained(model)
     model1.eval() # important!
     print("nn attacker file:", attacker_file)
     
     with torch.no_grad():
-        emb_table = model1.embeddings.word_embeddings.weight.numpy() # matrix 50265x768, lookup table
+        if "t5" in model:
+            emb_table = model1.encoder.embed_tokens.weight.numpy()
+        else:
+            emb_table = model1.embeddings.word_embeddings.weight.numpy() # matrix 50265x768, lookup table
         # similarity_table = create_embedding_similarity_table(emb_table)
     
     for i, tokens in enumerate(mapped_train_input_ids):
+        if i > 10000:
+            exit(1)
         if i <= last_index:
             continue
         original_ids = original_train_input_ids[i].tolist()
         checkpoint(attacker_file, i, dict1)
         t1 = time.time()
-        is_top1, is_top5 = knn_attack(original_ids, tokens, emb_table)
+        is_top1, is_top5, top5_unorder = knn_attack(original_ids, tokens, am[i], emb_table)
+        #is_top1, is_top5, top5_unorder = stencil_attacker(original_ids, tokens, am[i], emb_table, remapper)
         original_text = utils.get_text_from_input_ids(tokenizer, original_ids)
         # print("Top1 Reconstructed:", all(is_top1))
         # print("Top5 Reconstructed:", all(is_top5))
@@ -140,9 +227,15 @@ def main(model, tokenizer, mapped_train_input_ids, original_train_input_ids, att
         dict1[str(i)] = {"sentence": original_text,
                          "token_hit1": is_top1,
                          "token_hit5": is_top5,
+                         "token_hit5_unorder": top5_unorder,
+                         "rel_token_hit5_unorder": np.sum(top5_unorder) / len(top5_unorder),
                          "rel_token_hit1": np.sum(is_top1) / len(is_top1),
                          "rel_token_hit5": np.sum(is_top5) / len(is_top5),
                          "candidates_checked": 1,
                          "tokens": original_ids,
                          "computation_time": time.time() - t1
                     }
+        #print(dict1)
+        #statistics["stP1"][k] = d[key]["stencil_token_hit1"]
+        #statistics["stP5"][k] = d[key]["stencil_token_hit5"]
+        #statistics["stp5_unorder"][k] = d[key]["stencil_token_hit5_unorder"]

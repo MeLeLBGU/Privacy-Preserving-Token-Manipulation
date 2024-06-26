@@ -22,11 +22,14 @@ nvidia-smi -L
 # python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=$1 --frequency_window=half --dataset=$2 --attacker #--finetune
 
 #for nn attacker
-python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=conv --dataset=sst2 --attacker=knn
+#python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=conv --dataset=sst2 --attacker=knn
+
 # For imdb segments
 #python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --segment=$3 --remap_type=$1 --frequency_window=half --dataset=$2 --attacker=naive #--finetune
 
-#python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=$1 --dataset=$2 --attacker --remap=all --frequency_window=half
+#For generic conv
+#python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=conv --dataset=$1 --stencil_size=$2 --attacker=knn --remap=all
+
 #high
 #python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=freq-high --dataset=sst2 --attacker --remap=all --frequency_window=half
 
@@ -34,6 +37,6 @@ python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_robert
 # python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=freq-low --dataset=imdb --attacker --remap=all --frequency_window=half
 
 #random
-# python main.py --remap_count=2 --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=random --dataset=sst2 --attacker --remap=all
+python main.py --remap_count=3 --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap_type=random --dataset=imdb --segment=70  --attacker=naive --remap=all
 
 

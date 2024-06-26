@@ -76,15 +76,25 @@ def get_statistics_knn(d):
                    "real_probability": [0] * len_data,
                    "mrr":[0] * len_data,
                    "P1":[0] * len_data,
-                   "P5":[0] * len_data
+                   "P5":[0] * len_data,
+                   "p5_unorder":[0] * len_data,
+                   "stP1":[0] * len_data,
+                   "stP5":[0] * len_data,
+                   "stp5_unorder":[0] * len_data,              
+     "P1_sentences":[0]*len_data
                    }
     failed = 0
     # i saved it badly so need to convert it to string
     for k, key in enumerate(d):
         statistics["P1"][k] = d[key]["rel_token_hit1"]
         statistics["P5"][k] = d[key]["rel_token_hit5"]
+        statistics["p5_unorder"][k] = d[key]["rel_token_hit5_unorder"]
+        statistics["stP1"][k] = d[key]["stencil_token_hit1"]
+        statistics["stP5"][k] = d[key]["stencil_token_hit5"]
+        statistics["stp5_unorder"][k] = d[key]["stencil_token_hit5_unorder"]
         statistics["computation_time"] = statistics["computation_time"] + d[key]["computation_time"]
-        
+        if all(statistics["P1"]) :
+            statistics["P1_sentences"] = 1
         # statistics["abs_edit_distance"][k] = len(d[key]["tokens"]) - d[key]["token_hit"][0] #/ float())) # normalize
         statistics["rel_edit_distance"][k] = d[key]["rel_token_hit1"]
     print("Failed:", failed)
@@ -94,14 +104,20 @@ def get_statistics_knn(d):
 def plot_statistics(statistics, len_data):
     print("Total computation time (min):", statistics["computation_time"] / 60, "for:", len_data, "sentences.")
     print("Average computation time (sec):", statistics["computation_time"] / len_data)
-    print("Average rank:", np.average(statistics["rank"]))
     print("Average P@1:", np.average(statistics["P1"]))
     print("Average P@5:", np.average(statistics["P5"]))
-    print("Average MRR:", np.average(statistics["mrr"]))
-    print("Average absolute edit distance :", np.average(statistics["abs_edit_distance"]))
-    print("Average relative edit distance :", np.average(statistics["rel_edit_distance"]))
-    print("Average candidates checked:", np.average(statistics["candidates_checked"]))
-    print("Average probability of real sentence:", np.average(statistics["real_probability"]))
+    print("Average Unorder P@5:", np.average(statistics["p5_unorder"]))
+    print("Stencil Average P@1:", np.average(statistics["stP1"]))
+    print("Stencil Average P@5:", np.average(statistics["stP5"]))
+    print("Stencil Average Unorder P@5:", np.average(statistics["stp5_unorder"]))
+    print("Average P@1 sentences:", np.average(statistics["P1_sentences"]))
+    if np.average(statistics["rank"]) != 0:
+        print("Average rank:", np.average(statistics["rank"]))
+        print("Average MRR:", np.average(statistics["mrr"]))
+        print("Average absolute edit distance :", np.average(statistics["abs_edit_distance"]))
+        print("Average relative edit distance :", np.average(statistics["rel_edit_distance"]))
+        print("Average candidates checked:", np.average(statistics["candidates_checked"]))
+        print("Average probability of real sentence:", np.average(statistics["real_probability"]))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -131,7 +147,7 @@ if __name__ == "__main__":
             fname = args.file
             with open(fname, "r") as f:
                 data = json.load(f)
-        if "knn" in args.file:
+        if "knn" in args.file or "conv" in args.file or "noise" in args.file:
             statistics, len_data = get_statistics_knn(data)
         else:
             statistics, len_data = get_statistics(data)

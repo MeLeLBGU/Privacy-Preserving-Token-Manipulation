@@ -12,9 +12,13 @@ module load cuda/11.2
 #conda activate Privacy
 # nvidia-smi -L
 # for run all
-# python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap=$1 --save=$2 --remap_type=$3 --frequency_window=half --dataset=$4 --remap_count=$5 #--finetune
+python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --remap=$1 --save=$2 --remap_type=$3 --dataset=$4 --stencil_size=$5
 
-python main.py --remap_type=conv --remap=all --model=roberta-base --dataset=imdb --stencil_size=5
+# for testing
+#python main.py --remap_type=conv --remap=all --model=roberta-base --dataset=imdb --stencil_size=5
+
+# for accuracy run
+# python main.py --remap_type=conv --remap=all --model=roberta-base --dataset=sst2 --stencil_size=5
 #python main.py --frequency_path=/home/reemha/Privacy-Playground/wiki_freq_roberta.pkl --save=$1 --remap_type=$2 --frequency_window=$3 --dataset=$4 #--finetune
 #python create_frequencies.py --save=wiki_freq_roberta2.pkl --model=roberta-base
 

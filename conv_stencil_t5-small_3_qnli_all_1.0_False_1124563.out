@@ -1,0 +1,2 @@
+Truncation was not explicitly activated but `max_length` is provided a specific value, please use `truncation=True` to explicitly truncate examples to max length. Defaulting to 'longest_first' truncation strategy. If you encode pairs of sequences (GLUE-style) with the tokenizer you can select this strategy more precisely by providing a specific strategy to `truncation`.
+slurmstepd: error: *** JOB 1124563 ON ise-p100-01 CANCELLED AT 2024-04-14T16:09:59 ***

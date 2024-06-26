@@ -5,6 +5,53 @@ import numpy as np
 import logging as log
 from datasets import load_dataset
 from numba import jit, prange, njit
+#tokenizer = AutoTokenizer.from_pretrained(args.model)
+
+def find_matching_positions(values, searchval):
+    N = len(searchval)
+    possibles = np.where(values == searchval[0])[0]
+
+    solns = []
+    for p in possibles:
+        check = values[p:p+N]
+        if np.all(check == searchval):
+            return p
+    return None
+
+
+def search(pattern, text, q):
+    m = len(pattern)
+    n = len(text)
+    p = 0
+    t = 0
+    h = 1
+    i = 0
+    j = 0
+
+    for i in range(m-1):
+        h = (h*d) % q
+
+    # Calculate hash value for pattern and text
+    for i in range(m):
+        p = (d*p + ord(pattern[i])) % q
+        t = (d*t + ord(text[i])) % q
+
+    # Find the match
+    for i in range(n-m+1):
+        if p == t:
+            for j in range(m):
+                if text[i+j] != pattern[j]:
+                    break
+
+            j += 1
+            if j == m:
+                print("Pattern is found at position: " + str(i+1))
+
+        if i < n-m:
+            t = (d*(t-ord(text[i])*h) + ord(text[i+m])) % q
+
+            if t < 0:
+                t = t+q
 
 
 @jit(nopython=True)
@@ -34,9 +81,6 @@ def fast_cosine_matrix(u, M):
         u_norm = 0
         v_norm = 0
         for j in range(m):
-            # if (np.isnan(u[j])) or (np.isnan(v[j])):
-            #     continue
-
             udotv += u[j] * v[j]
             u_norm += u[j] * u[j]
             v_norm += v[j] * v[j]
@@ -58,20 +102,22 @@ def get_text_from_input_ids(tokenizer, input_ids, skip_special=False):
     """
     texts = []
     if not isinstance(input_ids[0], list):
-        return tokenizer.decode(input_ids, clean_up_tokenization_spaces = False, skip_special_tokens = skip_special)
+        return tokenizer.decode(input_ids, clean_up_tokenization_spaces = True, skip_special_tokens = skip_special)
     for ids in input_ids:
-        text = tokenizer.decode(ids, clean_up_tokenization_spaces = False, skip_special_tokens = skip_special)
+        text = tokenizer.decode(ids, clean_up_tokenization_spaces = True, skip_special_tokens = skip_special)
         texts.append(text)
     return texts
 
 
 def get_input_ids_from_text(tokenizer, data, with_special_tokens=True):
     input_ids = []
-    for sent in tqdm(data):
-        
-        text = tokenizer.encode(sent, add_special_tokens=with_special_tokens, pad_to_max_length = not with_special_tokens)  # Pad sentence to max lengthtruncation=not with_special_tokens)
-        input_ids.append(text)
-    log.info("Done generating input ids from text!")
+    if isinstance(data[0], list):
+        for sent in tqdm(data):
+            text = tokenizer.encode(sent, add_special_tokens=with_special_tokens, pad_to_max_length = not with_special_tokens)  # Pad sentence to max lengthtruncation=not with_special_tokens)
+            input_ids.append(text)
+    else:
+        return tokenizer.encode(data, add_special_tokens=with_special_tokens, pad_to_max_length = not with_special_tokens) 
+    #log.info("Done generating input ids from text!")
     return input_ids
 
 
@@ -110,7 +156,12 @@ def encode_text(tokenizer, data, max_len, with_seperation=True):
 
     return input_ids, attention_masks
 
+# def create_dataloader_roberta(train_dataset, val_dataset, train_labels, val_labels, batch_size):
+#     train_data = TensorDataset(train_input_ids, train_attention_mask, train_labels)
 
+#     train_dataloader = DataLoader(train_dataset, batch_size = batch_size, drop_last=True, shuffle=True, num_workers=0)
+#     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, num_workers=0)
+#     return train_dataloader, val_dataloader
 
 # create dataloader for training
 def create_dataloader(train_input_ids, train_attention_mask, train_labels, batch_size):
@@ -119,6 +170,7 @@ def create_dataloader(train_input_ids, train_attention_mask, train_labels, batch
     train_dataloader = DataLoader(train_data, sampler = train_sampler, batch_size = batch_size)
 
     return train_data, train_sampler, train_dataloader
+
 
 # get the maximum length of a word
 def get_max_len(dataset, tokenizer):
@@ -139,7 +191,7 @@ def get_max_len(dataset, tokenizer):
 # create dictonairy with text and label from sst2-like datasets
 def create_data(dataset):
     train_val_dict = []
-    data = load_dataset(dataset)
+    data = load_dataset(dataset)#, split='unsupervised')
 
     if "sst2" in dataset:
         text_key = "sentence"
@@ -216,3 +268,12 @@ def eucl_naive(A,B):
                 acc+=(A[i,k]-B[j,k])**2
             C[i,j]=np.sqrt(acc)
     return C
+
+def generate_points_within_hypersphere(num_points, num_dimensions, radius=1):
+    points = []
+    for _ in range(num_points):
+        point = np.random.normal(size=num_dimensions)
+        point /= np.linalg.norm(point)  # Normalize to unit vector
+        point *= radius  # Scale to desired radius
+        points.append(point)
+    return np.array(points)
