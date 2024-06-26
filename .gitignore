@@ -6,6 +6,9 @@ slurm*
 *.pt
 *.png
 *.txt
+*json
+*.sh
+*mmlu*
 data/
 output/
 # C extensions
